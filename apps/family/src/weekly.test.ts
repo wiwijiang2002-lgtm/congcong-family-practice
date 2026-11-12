@@ -28,10 +28,12 @@ function practice(s=errorState(),at=now):State {
 }
 
 test('Week uses seven local calendar days including today, and excludes future records',()=>{
-  const w=weekWindow(now);assert.equal(w.from,'2026-11-06');assert.equal(w.to,'2026-11-12');
-  assert.equal(weeklyTopics(errorState([3003],date('2026-11-05T23:59:00+08:00')),now).length,0);
-  assert.equal(weeklyTopics(errorState([3003],date('2026-11-06T00:01:00+08:00')),now).length,1);
-  assert.equal(weeklyTopics(errorState([3003],date('2026-11-13T00:01:00+08:00')),now).length,0);
+  // Calendar boundaries use the device timezone, including when CI runs in UTC.
+  const localNow=new Date(2026,10,12,10);
+  const w=weekWindow(localNow);assert.equal(w.from,'2026-11-06');assert.equal(w.to,'2026-11-12');
+  assert.equal(weeklyTopics(errorState([3003],new Date(2026,10,5,23,59)),localNow).length,0);
+  assert.equal(weeklyTopics(errorState([3003],new Date(2026,10,6,0,1)),localNow).length,1);
+  assert.equal(weeklyTopics(errorState([3003],new Date(2026,10,13,0,1)),localNow).length,0);
 });
 test('Repeated mistakes group by specific skill, not merely by subject or unit',()=>{
   const topics=weeklyTopics(errorState([3041,3043,3040]),now);
