@@ -1,7 +1,19 @@
 node_modules/
+.npm-cache/
 .next/
+.tmp-tests/
+.tmp-chrome*/
 **/out/
+dist/
 *.tsbuildinfo
 .env
 .env.*
 *.log
+
+# 家长本地导入的练习册题目与答案：只留在本机，不提交到公开仓库。
+private-bank/
+本地题库/
+*本地题库*.csv
+*本地题库*.json
+*.private.csv
+*.private.json

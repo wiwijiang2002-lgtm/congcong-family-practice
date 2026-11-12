@@ -36,6 +36,8 @@ function numeric(s: string): number | null {
   const value = b === undefined ? a : b === 0 ? NaN : a / b;
   return Number.isFinite(value) ? value / (percent ? 100 : 1) : null;
 }
+/** Import validation uses the same numeric grammar as grading, so a saved answer can be judged. */
+export function isNumericAnswer(value: string): boolean { return numeric(value) !== null; }
 export function grade(q: FamilyQuestion, answer: string): boolean {
   if (['fill_blank', 'calculation', 'word_problem'].includes(q.type)) {
     const actual = numeric(answer), expected = numeric(q.answer);
@@ -88,12 +90,15 @@ export function mistakes(state: State): Response[] {
   for (const a of [...state.attempts].sort((a,b) => a.completedAt.localeCompare(b.completedAt))) for (const r of a.responses) if(!r.question.weekly) latest.set(r.question.id, r);
   return [...latest.values()].filter(r => r.correct === false);
 }
-function validQuestion(q: unknown): q is FamilyQuestion {
+export function validQuestion(q: unknown): q is FamilyQuestion {
   if (!q || typeof q !== 'object') return false;
   const x = q as FamilyQuestion;
+  if(x.origin!==undefined&&x.origin!=='local')return false;
+  if(x.unit!==undefined&&typeof x.unit!=='string')return false;
+  if(x.mode!==undefined&&!['dictation','writing','text'].includes(x.mode))return false;
   if(x.weekly&&(!['practice','check'].includes(x.weekly.stage)||typeof x.weekly.key!=='string'||typeof x.weekly.label!=='string'||!Number.isInteger(x.weekly.sourceId)||typeof x.weekly.signature!=='string'))return false;
   if(x.weekly){const original=BANK.find(q=>q.id===x.weekly!.sourceId);if(!original||focusFor(original).key!==x.weekly.key)return false;}
-  return Number.isInteger(x.id) && ['语文','数学'].includes(x.subject) && ['choice','fill_blank','fill_blank_text'].includes(x.type) && typeof x.question === 'string' && typeof x.answer === 'string' && typeof x.explanation === 'string' && typeof x.knowledge_point === 'string' && (x.mode === 'writing' ? x.score === 0 : x.score === 10) && Array.isArray(x.options) && x.options.every(o => typeof o === 'string') && (x.type !== 'choice' || x.options.length === 4);
+  return Number.isInteger(x.id) && ['语文','数学'].includes(x.subject) && ['choice','fill_blank','fill_blank_text'].includes(x.type) && typeof x.question === 'string' && typeof x.answer === 'string' && typeof x.explanation === 'string' && typeof x.knowledge_point === 'string' && (x.mode === 'writing' ? x.score === 0 : x.score === 10) && Array.isArray(x.options) && x.options.length<=4 && x.options.every(o => typeof o === 'string' && o.trim().length>0) && (x.type !== 'choice' || (x.options.length >= 2));
 }
 function validWeekly(plan:Plan):boolean {
   const w=plan.weekly;

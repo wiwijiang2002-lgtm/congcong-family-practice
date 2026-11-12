@@ -6,6 +6,8 @@
 
 已实现家长布置、孩子作答、自动判分、错题与结果、家长查看、可读 HTML 报告、浏览器 JSON 备份。语文包含词语拼音默写、生字填空、古诗片段及仿写拓展；数学包含选择与数字填空。仿写保存原文供家长阅读，不自动计分。144 道基础自编活动中含 29 道仿写，非官方整册题库。
 
+家长端另有「我的题库」：可从 Excel 粘贴或导入 CSV/TSV/JSON，把购买的练习册题目只保存在当前浏览器，再勾选布置，或在孩子端按单元自由练习。真实题目尚未导入；仓库不含练习册内容，格式见 `本地题库导入说明.md`。本地题库暂不自动生成同类变式，相关错题在一周巩固中显示“待补充同类题”，不会伪造掌握状态。
+
 一周巩固按最近 7 个本地日历日归类具体技能，每项安排两道未见同类题；全部正确后至少等 24 小时，以另外两道未见题独立复测。复测完成前不提示对错或答案。复测全对仅表示本轮通过；之后出现新错会重新巩固。题池耗尽或不支持的补充题不能伪造掌握状态。
 
 ## 文件与命令
@@ -13,15 +15,17 @@
 - `apps/family/src/FamilyApp.tsx`：家长/孩子界面和角色切换。
 - `apps/family/src/data.ts`：课程、基础示例题库、练习模板。
 - `apps/family/src/domain.ts`：作答、判分、持久化数据校验和状态推进。
+- `apps/family/src/local-bank.ts`、`LocalBankPanel.tsx`、`local-bank.test.ts`：家长本地题库的解析、校验、浏览器存储、题库管理和题库测试。
 - `apps/family/src/weekly.ts`、`weekly-questions.ts`、`WeeklyPanel.tsx`：一周错题、变式题池、复测规则和界面。
 - `apps/family/src/report.ts`：可读报告及文本转义。
 - `apps/family/app/family.css`：家庭版响应式样式。
 - `apps/web/src`、`packages/core/src`：保留的上游组件与引擎，家庭版通过别名复用。
 - `.github/workflows/pages.yml`：线上构建与部署。
+- `本地题库导入说明.md`：家长导入格式、隐私边界和真实题目文件的提供要求。
 
 Node.js 22；仓库根目录依次运行 `npm ci`、`npm test`、`npm run dev`。开发网址为 `http://localhost:4173`。`npm run build` 生成根路径静态站 `dist/`；GitHub Pages 工作流通过 `FAMILY_BASE_PATH` 自动处理仓库子路径。先查看检查结果，再推送 main；程序推送会自动更新公开网站。
 
-39 项检查已在 Windows、本地 UTC 时区、GitHub Ubuntu 环境通过。生产构建和公开网址家长/孩子闭环已验证；真实 iPad Safari 与家庭无 VPN 网络尚待用户验证。更多证据见 `VALIDATION.md`、`DEPLOYMENT.md`。
+51 项检查已在 Windows 本地通过（其中新增 12 项本地题库检查）；生产静态构建和 Chromium 浏览器端到端闭环已验证。GitHub Ubuntu、公开网址和真实 iPad Safari 尚待本轮推送后复验；家庭无 VPN 网络仍需用户验证。更多证据见 `VALIDATION.md`、`DEPLOYMENT.md`。
 
 ## 在 DeepSeek Harness 中继续
 
@@ -31,9 +35,13 @@ DSH 官方说明：[Web UI 与工作目录](https://github.com/deepseek-ai/deeps
 
 ## 数据与后续方向
 
-当前 `congcong-family-demo:v1` 记录只在浏览器本地。网站地址、浏览器和设备之间不会自动同步。上线不能自动读取原 localhost 记录；使用设置中的 JSON 备份。家长/孩子角色无需密码，同一设备切换使用。没有登录、CloudBase、微信、邮件、推送、云数据库或运行时付费 API。
+当前 `congcong-family-demo:v1` 记录只在浏览器本地。家长导入的题库另存于 `congcong-family-local-bank:v1`，同样只在当前浏览器，且不包含任何真实练习册内容于仓库。网站地址、浏览器和设备之间不会自动同步。上线不能自动读取原 localhost 记录；使用设置中的 JSON 备份。家长/孩子角色无需密码，同一设备切换使用。没有登录、CloudBase、微信、邮件、推送、云数据库或运行时付费 API。
+
+本地题库的错题会进入一周巩固，但因没有配套变式题池，会标记为“待补充同类题”。不要为了“看起来完整”而伪造同类题或掌握状态；真实题目的导入格式和限制见 `本地题库导入说明.md`。
 
 用户后续关注“像玩游戏一样学习”。下一轮可以先设计每天约 10 分钟的短任务、聪聪成长反馈和复测后的奖励；保留自由选课，不把错题答对原题当作掌握，也不奖励单纯反复刷分。完整地图和剧情尚未实现。
+
+本地题库的下一步取决于真实题目文件：先按 `本地题库导入说明.md` 收集一个单元做格式与答案抽检，再决定是否加入 XLSX 直读、题目编辑、去重合并、按知识点补充同类变式。不要在没有教师/家长核对的情况下把练习册答案当成绝对正确。
 
 接入真实数据库时可依次建家庭、家长账号、练习任务、作答、技能错题、复测记录表，保留题目快照与版本。先实现家庭级权限和同步冲突处理，再迁移本地备份；保持儿童个人信息最少化。无需为孩子真实姓名、学校等信息增加必填项。
 
@@ -42,3 +50,4 @@ DSH 官方说明：[Web UI 与工作目录](https://github.com/deepseek-ai/deeps
 上游：https://github.com/wuwangzhang1216/congcong-school
 
 基准提交：`5540813185ae0867878c101abc083cad13a35fbd`，MIT，Copyright (c) 2026 wangzhang wu。许可和声明见 `LICENSE`、`THIRD_PARTY_NOTICES.txt`、`UPSTREAM.json`。本次在线改动发生在独立副本；不要覆盖原项目或移除版权。
+

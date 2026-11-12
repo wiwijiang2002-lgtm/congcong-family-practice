@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { BookOpen, LayoutDashboard, CalendarDays, Check, ChevronRight, ArrowLeft, Plus, Clock3, Target, FileCheck2, Sprout, ListChecks, RotateCcw, Download, Settings2, X, Keyboard, Grid2X2, CheckCircle2, CircleAlert } from 'lucide-react';
+import { BookOpen, LayoutDashboard, CalendarDays, Check, ChevronRight, ArrowLeft, Plus, Clock3, Target, FileCheck2, Sprout, ListChecks, RotateCcw, Download, Settings2, X, Keyboard, Grid2X2, CheckCircle2, CircleAlert, Library } from 'lucide-react';
 import { Mascot } from '@/components/Mascot';
 import { ChoiceQuestion } from '@/components/question/ChoiceQuestion';
 import { FillBlankQuestion } from '@/components/question/FillBlankQuestion';
@@ -13,9 +13,12 @@ import { STORAGE_KEY, advance, begin, check, createPlan, decode, initialState, l
 import { learningReport, weeklyLearningReport } from './report';
 import { WeeklyPanel } from './WeeklyPanel';
 import { scheduleWeekly, weeklyTopics } from './weekly';
+import { addBank, decodeBankStore, emptyBankStore, localCourses, LOCAL_BANK_KEY, saveBankStore, type DraftQuestion, type LocalBank, type LocalBankStore } from './local-bank';
+import { LocalBankPanel } from './LocalBankPanel';
+import { download } from './download';
 
 type Role = 'child' | 'parent';
-type Tab = 'today' | 'wrong' | 'history' | 'plans' | 'reports' | 'courses' | 'weekly';
+type Tab = 'today' | 'wrong' | 'history' | 'plans' | 'reports' | 'courses' | 'weekly' | 'bank';
 const dateLabel = (date: string) => new Date(date + 'T12:00:00').toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
 const percent = (a: Attempt) => Math.round(a.score / a.total * 100);
 const fmtTime = (a: Attempt) => {
@@ -23,12 +26,6 @@ const fmtTime = (a: Attempt) => {
   return n < 60 ? `${n} 分钟` : `${Math.floor(n/60)} 小时 ${n%60} 分钟`;
 };
 const responseAnswer = (answer: string, q: Attempt['responses'][number]['question']) => q.type === 'choice' ? (q.options[answer.trim().toUpperCase().charCodeAt(0)-65] ?? answer) : answer;
-
-function download(name: string, content: string, mime = 'application/json;charset=utf-8') {
-  const url = URL.createObjectURL(new Blob([content], { type: mime }));
-  const link = document.createElement('a'); link.href = url; link.download = name; link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
 
 function Dialog({ title, children, close }: { title: string; children: React.ReactNode; close: () => void }) {
   const box = useRef<HTMLDivElement>(null);
@@ -55,6 +52,9 @@ export default function FamilyApp() {
   const [state, setState] = useState<State | null>(null);
   const stateRef = useRef<State | null>(null);
   const persisted = useRef<string | null>(null);
+  const [bankStore, setBankStore] = useState<LocalBankStore>({ version: 1, nextId: 1_000_000, banks: [] });
+  const [bankError, setBankError] = useState('');
+  const bankRaw = useRef<string | null>(null);
   const [recovery, setRecovery] = useState<{ raw: string; message: string } | null>(null);
   const [storageWarning, setStorageWarning] = useState('');
   const [notice, setNotice] = useState('');
@@ -81,6 +81,7 @@ export default function FamilyApp() {
   const [search, setSearch] = useState('');
   const [course, setCourse] = useState<Course | null>(null);
   const [builderCourse, setBuilderCourse] = useState('');
+  const [builderSearch, setBuilderSearch] = useState('');
   const [custom, setCustom] = useState<FamilyQuestion[]>([]);
   const [customPrompt, setCustomPrompt] = useState('');
   const [customAnswer, setCustomAnswer] = useState('');
@@ -118,6 +119,17 @@ export default function FamilyApp() {
     return () => { window.removeEventListener('hashchange', hash); window.removeEventListener('storage', sync); window.removeEventListener('focus', updateDay); clearInterval(timer); };
   }, []);
   useEffect(() => { if (notice) { const t = setTimeout(() => setNotice(''), 5000); return () => clearTimeout(t); } }, [notice]);
+  // The parent bank is deliberately a separate key: importing or removing it never
+  // rewrites practice records, and a corrupt bank never blocks the child's history.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LOCAL_BANK_KEY);
+      bankRaw.current = raw;
+      setBankStore(raw ? decodeBankStore(raw) : emptyBankStore());
+    } catch (e) {
+      setBankError(e instanceof Error ? e.message : '本地题库数据无法读取');
+    }
+  }, []);
   useEffect(() => { headingRef.current?.focus(); window.scrollTo({ top: 0, behavior: 'auto' }); }, [tab, builder, running, resultId, state?.session?.index]);
 
   // One write per interaction. Never clear upstream csf-* records.
@@ -144,13 +156,13 @@ export default function FamilyApp() {
   }
   function navigate(t: Tab) { setTab(t); setBuilder(false); setResultId(null); setRunning(false); setCourse(null); }
   function coursePractice(c: Course) {
-    if (role === 'parent') { setBuilderCourse(c.id); setSelected(c.questions.map(q=>q.id)); setName(`${c.title} · 课后练习`); setMinutes(c.subject==='语文'?8:6); setPlanDate(today); setBuilder(true); return; }
+    if (role === 'parent') { setBuilderCourse(c.edition==='local'&&c.bankId?`local:${c.bankId}`:c.id); setSelected(c.questions.map(q=>q.id)); setBuilderSearch(''); setName(`${c.title} · 课后练习`.slice(0,40)); setMinutes(c.subject==='语文'?8:6); setPlanDate(today); setBuilder(true); return; }
     const next = commit(s => {
       if (s.session) throw new Error('请先完成进行中的练习，再开始其他课程。');
-      const p = createPlan(`${c.title} · 自主练习`,today,c.subject==='语文'?8:6,c.questions);
+      const p = createPlan(`${c.title} · 自主练习`.slice(0,40),today,c.subject==='语文'?8:6,c.questions);
       return begin({...s,plans:[...s.plans,p]},p.id);
     });
-    if(next?.session) {setRunning(true);setTyped(false);setResultId(null);}
+    if(next?.session) {setRunning(true);setTyped(false);setResultId(null);if(c.available&&c.available>c.questions.length)setNotice(`本单元共 ${c.available} 道题，这次先练前 ${c.questions.length} 道。`);}
   }
   function addCustom() {
     if (!customPrompt.trim() || !customAnswer.trim()) {setNotice('请填写题干或拼音提示，以及标准答案。');return;}
@@ -177,7 +189,10 @@ export default function FamilyApp() {
   }
   function publish() {
     if (!selected.length) { setNotice('至少选一道题，再布置练习。'); return; }
-    const next = commit(s => ({ ...s, plans: [...s.plans, createPlan(name, planDate, minutes, selected.map(id => [...BANK,...custom].find(q => q.id === id)!))] }));
+    const pool=[...BANK,...bankStore.banks.flatMap(bank=>bank.questions),...custom];
+    const picked=selected.map(id=>pool.find(q=>q.id===id)).filter((q): q is FamilyQuestion=>!!q);
+    if(picked.length!==selected.length){setNotice('有题目已不在题库中，请重新勾选。');return;}
+    const next = commit(s => ({ ...s, plans: [...s.plans, createPlan(name, planDate, minutes, picked)] }));
     if (next) { setBuilder(false); setTab('plans'); setNotice('练习已布置，切换到孩子端就能开始。'); }
   }
   function review() {
@@ -211,6 +226,53 @@ export default function FamilyApp() {
     catch (e) { setNotice(e instanceof Error ? e.message : '报告导出未完成，请重试。'); }
   };
 
+  function persistBanks(next: LocalBankStore): boolean {
+    try {
+      saveBankStore(next);
+      bankRaw.current = JSON.stringify(next);
+      setBankStore(next);
+      setBankError('');
+      return true;
+    } catch (e) {
+      setNotice(e instanceof Error ? `本地题库未保存：${e.message}` : '本地题库未保存，请检查浏览器存储空间。');
+      return false;
+    }
+  }
+  function importLocalBank(input: { name: string; note: string; rows: DraftQuestion[] }): boolean {
+    try {
+      const { store, bank } = addBank(bankStore, input);
+      if (!persistBanks(store)) return false;
+      setNotice(`《${bank.name}》已保存到本浏览器：${bank.questions.length} 道题。不会上传，也不会提交到公开仓库。`);
+      return true;
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : '题库导入未完成。');
+      return false;
+    }
+  }
+  function deleteLocalBank(id: string) {
+    if (persistBanks({ ...bankStore, banks: bankStore.banks.filter(bank => bank.id !== id) })) setNotice('本地题库已删除；已布置的练习和结果仍保留。');
+  }
+  function resetLocalBanks() {
+    try {
+      localStorage.removeItem(LOCAL_BANK_KEY);
+      bankRaw.current = null;
+      setBankStore(emptyBankStore());
+      setBankError('');
+      setNotice('本地题库已清空。练习记录和已有结果没有改动。');
+    } catch { setNotice('浏览器阻止了本地存储操作，本地题库未清空。'); }
+  }
+  function exportRawBanks() {
+    if (!bankRaw.current) { setNotice('没有可导出的本地题库原始数据。'); return; }
+    download(`聪聪-本地题库-原始数据-${today}.json`, bankRaw.current);
+    setNotice('原始数据已下载，请只保存在家长自己的设备上。');
+  }
+  function assignLocalBank(bank: LocalBank) {
+    setTab('plans'); setBuilder(true); setResultId(null); setRunning(false);
+    setBuilderCourse(`local:${bank.id}`); setSelected([]); setBuilderSearch('');
+    setName(`${bank.name} · 本地练习`.slice(0,40)); setMinutes(10); setPlanDate(today);
+    setNotice('已打开本地题库，勾选要布置的题目（每份最多 12 道）。');
+  }
+
   if (recovery) return <main className="recovery"><CircleAlert size={40}/><h1>本地数据需要检查</h1><p>没有覆盖原记录。可以先导出原始数据，再重置体验版。</p><p className="muted">{recovery.message}</p><div className="button-row"><button className="primary" onClick={() => download('聪聪-原始数据.json', recovery.raw)}>导出原始数据</button><button className="secondary" onClick={() => setConfirmReset(true)}>重置体验数据</button></div>{confirmReset && <Dialog title="重置本机体验数据？" close={() => setConfirmReset(false)}><p>仅清空家庭体验版的练习、结果和进度。请先导出需要保留的内容。</p><button className="danger" onClick={reset}>确认重置</button></Dialog>}</main>;
   if (!state) return <main className="recovery"><Sprout size={40}/><h1>聪聪正在准备练习…</h1></main>;
 
@@ -228,8 +290,16 @@ export default function FamilyApp() {
   const weeklySummary=weeklyTopics(state,weeklyNow);
   const navItems = role === 'child'
     ? [{ id: 'today' as Tab, label: '今天的练习', icon: BookOpen }, { id: 'courses' as Tab, label: '自由选课', icon: Grid2X2 }, { id: 'wrong' as Tab, label: '我的错题', icon: RotateCcw }, { id: 'weekly' as Tab, label: '一周巩固', icon: Target }, { id: 'history' as Tab, label: '成长记录', icon: Sprout }]
-    : [{ id: 'plans' as Tab, label: '练习安排', icon: CalendarDays }, { id: 'courses' as Tab, label: '按课文选题', icon: Grid2X2 }, { id: 'reports' as Tab, label: '学习结果', icon: FileCheck2 }, { id: 'weekly' as Tab, label: '一周巩固', icon: Target }];
-  const builderItems=[...BANK.filter(q=>builderCourse?q.lessonId===builderCourse:selected.includes(q.id)),...custom];
+    : [{ id: 'plans' as Tab, label: '练习安排', icon: CalendarDays }, { id: 'courses' as Tab, label: '按课文选题', icon: Grid2X2 }, { id: 'bank' as Tab, label: '我的题库', icon: Library }, { id: 'reports' as Tab, label: '学习结果', icon: FileCheck2 }, { id: 'weekly' as Tab, label: '一周巩固', icon: Target }];
+  const importedCourses = localCourses(bankStore.banks);
+  const localBuilderBank = builderCourse.startsWith('local:') ? bankStore.banks.find(bank => `local:${bank.id}` === builderCourse) : undefined;
+  const builderItems=[...(localBuilderBank ? localBuilderBank.questions : BANK.filter(q=>builderCourse?q.lessonId===builderCourse:selected.includes(q.id))),...custom];
+  const builderFiltered = builderItems.filter(q => (subject === '全部' || q.subject === subject) && (!builderSearch.trim() || q.question.includes(builderSearch.trim())));
+  const builderShown = builderFiltered.slice(0, 100);
+  const visibleCourses = (courseSubject === '数学'
+    ? [...COURSES.filter(c => c.subject === '数学'), ...importedCourses.filter(c => c.subject === '数学')]
+    : [...COURSES.filter(c => c.subject === '语文' && c.edition === edition), ...importedCourses.filter(c => c.subject === '语文')]
+  ).filter(c => c.title.includes(search.trim()) || c.section.includes(search.trim()));
 
   function planCard(p: Plan) {
     const a = finished(p.id), isResume = current?.planId === p.id;
@@ -261,7 +331,7 @@ export default function FamilyApp() {
           {currentQ.type !== 'choice' && !currentQ.mode && <div className="input-switch"><button aria-pressed={!typed} onClick={() => setTyped(false)}><Grid2X2 size={16}/>{currentQ.subject === '数学' ? '数字键盘' : '字卡填空'}</button><button aria-pressed={typed} onClick={() => setTyped(true)}><Keyboard size={16}/>键盘输入</button></div>}
           <div className="question-body" key={currentQ.id}>
           {currentQ.type === 'choice' ? <ChoiceQuestion question={currentQ} answer={current.answer} phase={checked && !independent ? 'checked' : 'answering'} isCorrect={checked?.correct ?? null} onChange={answer => commit(s => s.session && !s.session.responses[s.session.index] ? ({...s, session: {...s.session, answer}}) : s)} locked={exit || settings || (independent && !!checked)}/>
-            : (typed || !!currentQ.mode) ? <><QuestionPrompt text={currentQ.question} locked={exit || settings || (independent && !!checked)}/><label htmlFor="answer" className="answer-label">{currentQ.mode === 'writing' ? '写下自己的句子，稍后和家长交流' : currentQ.mode === 'dictation' ? '在这里默写你的答案' : '在这里填写答案'}</label><textarea id="answer" className={`native-answer ${checked && !independent ? checked.correct ? 'answer-correct' : 'answer-wrong' : ''}`} rows={2} maxLength={240} inputMode={currentQ.subject === '数学' ? 'text' : undefined} enterKeyHint="done" autoComplete="off" autoCorrect="off" spellCheck={false} placeholder={currentQ.subject === '数学' ? '例如：6 或 3/4' : '点击这里，用中文键盘输入'} value={current.answer} disabled={!!checked || exit || settings} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} onChange={e => { const answer = e.target.value; commit(s => s.session && !s.session.responses[s.session.index] ? ({...s, session: {...s.session, answer}}) : s); }}/><p className="muted small">{currentQ.mode === 'writing' ? '仿写只记录原文，不自动判分，由家长阅读交流。' : currentQ.subject === '数学' ? '只填写数值，不需要单位。' : '忽略空格与常见标点，汉字需要准确。可使用 iPad 系统中文输入法。'}</p></>
+            : (typed || !!currentQ.mode) ? <><QuestionPrompt text={currentQ.question} locked={exit || settings || (independent && !!checked)}/><label htmlFor="answer" className="answer-label">{currentQ.mode === 'writing' ? '写下自己的句子，稍后和家长交流' : currentQ.mode === 'dictation' ? '在这里默写你的答案' : '在这里填写答案'}</label><textarea id="answer" className={`native-answer ${checked && !independent ? checked.correct ? 'answer-correct' : 'answer-wrong' : ''}`} rows={2} maxLength={500} inputMode={currentQ.subject === '数学' ? 'text' : undefined} enterKeyHint="done" autoComplete="off" autoCorrect="off" spellCheck={false} placeholder={currentQ.subject === '数学' ? '例如：6 或 3/4' : '点击这里，用中文键盘输入'} value={current.answer} disabled={!!checked || exit || settings} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} onChange={e => { const answer = e.target.value; commit(s => s.session && !s.session.responses[s.session.index] ? ({...s, session: {...s.session, answer}}) : s); }}/><p className="muted small">{currentQ.mode === 'writing' ? '仿写只记录原文，不自动判分，由家长阅读交流。' : currentQ.subject === '数学' ? '只填写数值，不需要单位。' : '忽略空格与常见标点，汉字需要准确。可使用 iPad 系统中文输入法。'}</p></>
             : currentQ.subject === '语文' ? <FillBlankTextQuestion question={currentQ} answer={current.answer} phase={checked && !independent ? 'checked' : 'answering'} isCorrect={checked?.correct ?? null} onChange={answer => commit(s => s.session && !s.session.responses[s.session.index] ? ({...s, session: {...s.session, answer}}) : s)} locked={exit || settings || (independent && !!checked)}/>
             : <FillBlankQuestion question={currentQ} answer={current.answer} phase={checked && !independent ? 'checked' : 'answering'} isCorrect={checked?.correct ?? null} onChange={answer => commit(s => s.session && !s.session.responses[s.session.index] ? ({...s, session: {...s.session, answer}}) : s)} locked={exit || settings || (independent && !!checked)}/>}
           </div>
@@ -279,28 +349,31 @@ export default function FamilyApp() {
         {role === 'child' && <div className="button-row result-actions"><button className="primary" onClick={() => { setResultId(null); setTab('today'); }}>回到今天的练习</button>{wrongs.length > 0 && <button className="secondary" onClick={review}>再练错题</button>}<button className="text-button" onClick={() => switchRole('parent')}>给家长看结果 <ChevronRight size={17}/></button></div>}
       </>
       : tab === 'weekly' ? <WeeklyPanel state={state} role={role} now={weeklyNow} headingRef={headingRef} schedule={prepareWeekly} start={start} exportReport={exportWeekly}/>
+      : tab === 'bank' ? <LocalBankPanel banks={bankStore.banks} error={bankError} headingRef={headingRef} onImport={importLocalBank} onDelete={deleteLocalBank} onReset={resetLocalBanks} onExportRaw={exportRawBanks} onAssign={assignLocalBank} notice={setNotice}/>
       : builder ? <>
         <button className="text-button back-button" onClick={() => setBuilder(false)}><ArrowLeft size={18}/>返回练习安排</button><div className="page-heading"><div><span className="eyebrow">一点准备，让陪伴更轻松</span><h1 ref={headingRef} tabIndex={-1}>布置一份小练习</h1><p>选择现成组合，或自己挑选今天想练的题。</p></div></div>
-        <div className="template-grid">{TEMPLATES.map(t => <button key={t.id} className={`template-card ${selected.join(',') === t.ids.join(',') ? 'selected' : ''}`} onClick={() => { setSelected(t.ids); setName(t.name); setMinutes(t.minutes); setBuilderCourse(''); }}><span className="template-icon">{t.id === 'chinese' ? '文' : t.id === 'math' ? '数' : '语数'}</span><strong>{t.name}</strong><p>{t.note}</p><small>{t.ids.length} 道题 · 约 {t.minutes} 分钟</small></button>)}</div>
-        <div className="course-toolbar"><label className="muted small" style={{flex:1}}>按课文 / 单元选择<select aria-label="布置练习的课文或单元" value={builderCourse} onChange={e=>{const c=COURSES.find(c=>c.id===e.target.value);setBuilderCourse(e.target.value);if(c){setSelected(c.questions.map(q=>q.id));setName(`${c.title} · 课后练习`);setMinutes(c.subject==='语文'?8:6);}}}><option value="">当前组合</option>{(['tongbian-2026','sujiao-math'] as const).map(ed=><optgroup key={ed} label={editionName(ed)}>{COURSES.filter(c=>c.edition===ed).map(c=><option key={c.id} value={c.id}>{c.section} · {c.title}</option>)}</optgroup>)}</select></label></div>
+        <div className="template-grid">{TEMPLATES.map(t => <button key={t.id} className={`template-card ${selected.join(',') === t.ids.join(',') ? 'selected' : ''}`} onClick={() => { setSelected(t.ids); setName(t.name); setMinutes(t.minutes); setBuilderCourse(''); setBuilderSearch(''); }}><span className="template-icon">{t.id === 'chinese' ? '文' : t.id === 'math' ? '数' : '语数'}</span><strong>{t.name}</strong><p>{t.note}</p><small>{t.ids.length} 道题 · 约 {t.minutes} 分钟</small></button>)}</div>
+        <div className="course-toolbar"><label className="muted small" style={{flex:1}}>按课文 / 单元选择<select aria-label="布置练习的课文或单元" value={builderCourse} onChange={e=>{const value=e.target.value;setBuilderCourse(value);setBuilderSearch('');if(value.startsWith('local:')){const bank=bankStore.banks.find(b=>`local:${b.id}`===value);setSelected([]);if(bank){setName(`${bank.name} · 本地练习`.slice(0,40));setMinutes(10);setPlanDate(today);setNotice('勾选要布置的本地题目，每份最多 12 道。');}}else{const c=COURSES.find(c=>c.id===value);if(c){setSelected(c.questions.map(q=>q.id));setName(`${c.title} · 课后练习`);setMinutes(c.subject==='语文'?8:6);}}}}><option value="">当前组合</option>{(['tongbian-2026','sujiao-math'] as const).map(ed=><optgroup key={ed} label={editionName(ed)}>{COURSES.filter(c=>c.edition===ed).map(c=><option key={c.id} value={c.id}>{c.section} · {c.title}</option>)}</optgroup>)}{bankStore.banks.length>0&&<optgroup label="家长本地题库 · 仅本机">{bankStore.banks.map(b=><option key={b.id} value={`local:${b.id}`}>{b.name}（{b.questions.length} 道）</option>)}</optgroup>}</select></label></div>
         <div className="builder-meta panel"><label>练习名称<input value={name} maxLength={40} onChange={e => setName(e.target.value)} placeholder="给练习起个名字"/></label><label>练习日期<input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)}/></label><label>预计分钟<input type="number" min="1" max="60" value={minutes} onChange={e => setMinutes(Number(e.target.value))}/></label></div>
         <div className="section-heading"><h2>挑选题目 <span className="count-pill">{selected.length} / 12</span></h2><div className="filter-tabs" aria-label="按学科筛选">{['全部','语文','数学'].map(s => <button key={s} aria-pressed={subject===s} onClick={() => setSubject(s)}>{s}</button>)}</div></div>
-        <p className="muted small question-bank-note">二年级上册自编示例题。默写与填空自动判分，仿写保存原文供家长查看；请先预览并按学校要求调整。</p>
-        <div className="selection-list">{builderItems.filter(q => subject === '全部' || q.subject === subject).map(q => <label key={q.id} className={`selection-card ${selected.includes(q.id) ? 'selected' : ''}`}><input type="checkbox" checked={selected.includes(q.id)} onChange={e => setSelected(e.target.checked ? (selected.length<12?[...selected,q.id]:selected) : selected.filter(id => id!==q.id))}/><span><span className="card-kicker">{q.subject} · {typeName(q)} · {q.knowledge_point}</span><strong>{q.question}</strong><details onClick={e => e.stopPropagation()}><summary>预览答案与解析</summary><p>{responseAnswer(q.answer,q)} · {q.explanation}</p></details></span></label>)}</div>
+        <p className="muted small question-bank-note">{localBuilderBank ? `来自《${localBuilderBank.name}》的本地题目，只保存在当前浏览器；勾选后随练习保存题目快照，答案不会上传。` : '二年级上册自编示例题。默写与填空自动判分，仿写保存原文供家长查看；请先预览并按学校要求调整。'}</p>
+        {localBuilderBank && <div className="course-toolbar"><input type="search" className="course-search" aria-label="在本地题库中搜索题干" value={builderSearch} onChange={e=>setBuilderSearch(e.target.value)} placeholder="在本题库中搜索题干或知识点"/><span className="muted small">共 {localBuilderBank.questions.length} 道，当前显示 {builderFiltered.length} 道{localBuilderBank.questions.length>100?'（最多显示前 100 道，可搜索缩小范围）':''}</span></div>}
+        <div className="selection-list">{builderShown.map(q => <label key={q.id} className={`selection-card ${selected.includes(q.id) ? 'selected' : ''}`}><input type="checkbox" checked={selected.includes(q.id)} onChange={e => setSelected(e.target.checked ? (selected.length<12?[...selected,q.id]:selected) : selected.filter(id => id!==q.id))}/><span><span className="card-kicker">{q.subject} · {typeName(q)} · {q.knowledge_point}{q.origin === 'local' ? ' · 本地' : ''}</span><strong>{q.question}</strong><details onClick={e => e.stopPropagation()}><summary>预览答案与解析</summary><p>{responseAnswer(q.answer,q)} · {q.explanation}</p></details></span></label>)}</div>
+        {builderShown.length === 0 && <div className="empty compact"><BookOpen size={26}/><h3>没有匹配的题目</h3><p>换一个关键词，或切换学科。</p></div>}
         <section className="panel custom-question"><h3>补充老师要求的默写内容</h3><p className="muted small">可填写生字词与拼音提示，或需要背诵的短片段。只保存在本地这份练习中。</p><label>题干 / 拼音 / 背诵提示<input maxLength={180} value={customPrompt} onChange={e=>setCustomPrompt(e.target.value)} placeholder="例如：看拼音写词语：zhī shi"/></label><label>标准答案<textarea maxLength={240} rows={2} value={customAnswer} onChange={e=>setCustomAnswer(e.target.value)} placeholder="例如：知识（或老师要求背诵的短片段）"/></label><button className="secondary" disabled={!customPrompt.trim()||!customAnswer.trim()||selected.length>=12} onClick={addCustom}><Plus size={17}/>加入这份练习</button></section>
         <div className="builder-footer"><span>已选 <strong>{selected.length}</strong> 道题<span className="muted small"> · 仿写不计分</span></span><button className="primary" onClick={publish} disabled={!selected.length || !name.trim() || !planDate || !Number.isInteger(minutes) || minutes<1 || minutes>60}>布置练习 <ChevronRight size={18}/></button></div>
       </>
       : tab === 'courses' ? <>
         <div className="page-heading"><div><span className="eyebrow">二年级上册 · 从你正在学的地方开始</span><h1 ref={headingRef} tabIndex={-1}>{course ? course.title : '想学哪一课，就选哪一课'}</h1><p>所有课目都可以直接进入，无需完成前面的课程。</p></div>{course && <button className="secondary" onClick={()=>setCourse(null)}><ArrowLeft size={17}/>回到目录</button>}</div>
         {course ? <>
-          <div className="course-note">{editionName(course.edition)} · {course.section} · 自编配套练习，不包含教材全文</div>
-          <section className="course-detail"><span className={`subject-tag ${course.subject==='语文'?'chinese':'math'}`}>{course.subject} · 课后练习</span><h2>{course.subject==='语文'?'生字词默写 + 知识拓展':'选一组选填题，巩固这单元'}</h2><p>{course.subject==='语文'?'看拼音写词语、生字填空、部分古诗背诵片段和一句话仿写。家长可以再添加老师要求的默写内容。':'每组 4 道自编选择或填空题。先读题、独立作答，再看解析。'}</p><div className="button-row"><button className="primary" disabled={role==='child'&&!!current} onClick={()=>coursePractice(course)}>{role==='parent'?'用这课布置练习':'直接开始这课练习'}<ChevronRight size={18}/></button><span className="muted small">{course.questions.length} 道题{course.subject==='语文'?' · 仿写只记录、不计分':''}</span></div><div className="course-expansion"><h3><Sprout size={18} style={{display:'inline',verticalAlign:'middle',marginRight:7}}/>每课知识拓展</h3><p>{course.expansion}</p>{course.subject==='语文'&&<p>想一想：联系自己的生活，你还能举出什么例子？把你的想法写在仿写题里。</p>}</div></section>
+          <div className="course-note">{editionName(course.edition)} · {course.section} · {course.edition === 'local' ? '题目与答案只保存在当前浏览器，不上传' : '自编配套练习，不包含教材全文'}</div>
+          <section className="course-detail"><span className={`subject-tag ${course.subject==='语文'?'chinese':'math'}`}>{course.subject} · {course.edition === 'local' ? '本地题库' : '课后练习'}</span><h2>{course.edition === 'local' ? `${course.title} · 本地练习` : course.subject==='语文'?'生字词默写 + 知识拓展':'选一组选填题，巩固这单元'}</h2><p>{course.edition === 'local' ? (role === 'parent' ? '从这份单元中挑选题目布置给孩子；也可以直接点“用这课布置练习”先取前 12 道，再在布置页调整。' : '直接开始本单元的前 12 道题，做完后可以在“成长记录”中查看结果。') : course.subject==='语文'?'看拼音写词语、生字填空、部分古诗背诵片段和一句话仿写。家长可以再添加老师要求的默写内容。':'每组 4 道自编选择或填空题。先读题、独立作答，再看解析。'}</p>{course.edition === 'local' && course.available && course.available > course.questions.length && <p className="muted small">本单元共 {course.available} 道，单次练习最多 12 道，这里先取前 {course.questions.length} 道；家长可在布置页搜索并勾选其他题目。</p>}<div className="button-row"><button className="primary" disabled={role==='child'&&!!current} onClick={()=>coursePractice(course)}>{role==='parent'?'用这课布置练习':'直接开始这课练习'}<ChevronRight size={18}/></button><span className="muted small">{course.questions.length} 道题{course.subject==='语文'&&course.edition!=='local'?' · 仿写只记录、不计分':''}</span></div><div className="course-expansion"><h3><Sprout size={18} style={{display:'inline',verticalAlign:'middle',marginRight:7}}/>{course.edition === 'local' ? '题库说明' : '每课知识拓展'}</h3><p>{course.expansion}</p>{course.subject==='语文'&&course.edition!=='local'&&<p>想一想：联系自己的生活，你还能举出什么例子？把你的想法写在仿写题里。</p>}</div></section>
           {current&&role==='child'&&<div className="inline-note">还有一份练习正在进行，请先到“今天的练习”继续完成。</div>}
         </> : <>
           <div className="course-toolbar"><div className="filter-tabs" aria-label="选择学科">{(['语文','数学'] as const).map(s=><button key={s} aria-pressed={courseSubject===s} onClick={()=>{setCourseSubject(s);setSearch('');}}>{s}</button>)}</div>{courseSubject==='语文'&&<select aria-label="语文教材目录" value={edition} onChange={e=>setEdition(e.target.value as Course['edition'])}><option value="tongbian-2026">统编语文 · 上游2026秋版目录</option></select>}<input type="search" className="course-search" aria-label="搜索课文或单元" value={search} onChange={e=>setSearch(e.target.value)} placeholder={courseSubject==='语文'?'搜索：如登鹳雀楼、夕阳真美':'搜索：如乘法、三位数'}/></div>
-          <div className="course-note">{courseSubject==='语文'?'统编二年级上册，目录按上游 2026 秋版核对。词语为示例练习，非官方必默清单；必背内容以老师要求为准，可由家长补充。':'按苏教新课标二上 6 个核心单元组织自编示例题。综合实践活动暂未覆盖；请家长对照学校教材预览选题。'}</div>
-          <div className="course-grid">{COURSES.filter(c=>c.subject===courseSubject&&(courseSubject==='数学'||c.edition===edition)&&c.title.includes(search.trim())).map(c=><button className="course-card" key={c.id} onClick={()=>setCourse(c)}><span className={`subject-icon ${c.subject==='语文'?'peach':'sage'}`}>{c.subject==='语文'?<BookOpen size={22}/>:<Target size={22}/>}</span><div><span className="card-kicker">{c.section} · 二年级上册</span><h3>{c.title}</h3><p>{c.subject==='语文'?'拼音提示 · 生字词 · 仿写拓展':'选择题 · 数字填空 · 解析'}</p><div className="course-count">{c.questions.length} 道示例题 · 可直接进入</div></div><ChevronRight size={18}/></button>)}</div>
-          {!COURSES.some(c=>c.subject===courseSubject&&(courseSubject==='数学'||c.edition===edition)&&c.title.includes(search.trim()))&&<div className="empty"><BookOpen size={28}/><h3>没有找到这篇课文</h3><p>试试其他关键词，或切换学科。</p></div>}
+          <div className="course-note">{courseSubject==='语文'?'统编二年级上册，目录按上游 2026 秋版核对。词语为示例练习，非官方必默清单；必背内容以老师要求为准，可由家长补充。':'按苏教新课标二上 6 个核心单元组织自编示例题。综合实践活动暂未覆盖；请家长对照学校教材预览选题。'}{importedCourses.some(c=>c.subject===courseSubject)&&<><br/>下方“家长本地题库”来自本机导入，只保存在当前浏览器，可像课文一样自由练习；每个单元单次最多 12 道。</>}</div>
+          <div className="course-grid">{visibleCourses.map(c=><button className="course-card" key={c.id} onClick={()=>setCourse(c)}><span className={`subject-icon ${c.subject==='语文'?'peach':'sage'}`}>{c.subject==='语文'?<BookOpen size={22}/>:<Target size={22}/>}</span><div><span className="card-kicker">{c.edition==='local'?`${c.section} · 本地题库`:`${c.section} · 二年级上册`}</span><h3>{c.title}</h3><p>{c.edition==='local'?'家长导入 · 只在本机 · 可自由练习':c.subject==='语文'?'拼音提示 · 生字词 · 仿写拓展':'选择题 · 数字填空 · 解析'}</p><div className="course-count">{c.available?`${c.available} 道 · 单次最多 12 道`:`${c.questions.length} 道示例题 · 可直接进入`}</div></div><ChevronRight size={18}/></button>)}</div>
+          {!visibleCourses.length&&<div className="empty"><BookOpen size={28}/><h3>没有找到这篇课文</h3><p>试试其他关键词，或切换学科。</p></div>}
         </>}
       </>
       : role === 'child' && tab === 'today' ? <>
@@ -316,7 +389,7 @@ export default function FamilyApp() {
         {wrongs.length ? <div className="review-list">{wrongs.map(r => <article className="review-card" key={r.question.id}><span className="subject-icon peach"><BookOpen size={20}/></span><div><div className="card-kicker">{r.question.subject} · {r.question.knowledge_point}</div><h3>{r.question.question}</h3><p>上次答案：<strong className="red-text">{responseAnswer(r.answer,r.question)}</strong></p><details><summary>看看答案与讲解</summary><p>参考答案：{responseAnswer(r.question.answer,r.question)}</p><p>{r.question.explanation}</p></details></div></article>)}</div> : <div className="empty spacious"><Mascot size={130} mood="happy" skinOverride={null}/><h2>这里暂时没有错题</h2><p>做完练习后，需要巩固的题会自动收进来。</p><button className="primary" onClick={() => navigate('today')}>去做今天的练习</button></div>}
       </>
       : role === 'parent' && tab === 'plans' ? <>
-        <div className="page-heading"><div><span className="eyebrow">陪伴有方向，学习有回响</span><h1 ref={headingRef} tabIndex={-1}>安排一点，收获一点</h1><p>布置当天练习，完成后回来看看孩子的收获。</p></div><button className="primary" onClick={() => { setBuilder(true); setBuilderCourse(''); setPlanDate(today); }}><Plus size={19}/>布置练习</button></div>
+        <div className="page-heading"><div><span className="eyebrow">陪伴有方向，学习有回响</span><h1 ref={headingRef} tabIndex={-1}>安排一点，收获一点</h1><p>布置当天练习，完成后回来看看孩子的收获。</p></div><div className="button-row"><button className="secondary" onClick={() => navigate('bank')}><Library size={17}/>我的题库</button><button className="primary" onClick={() => { setBuilder(true); setBuilderCourse(''); setBuilderSearch(''); setPlanDate(today); }}><Plus size={19}/>布置练习</button></div></div>
         <div className="parent-banner"><div className="subject-icon sage"><LayoutDashboard size={26}/></div><div><strong>一份练习，一次看得见的成长</strong><p>选题 → 孩子作答 → 自动判分 → 回顾结果</p></div><span className="local-pill"><i/>无需账号</span></div>
         <div className="stats-grid child-stats"><div><span>今天已布置</span><strong>{todays.length}<small> 份</small></strong></div><div><span>今天已完成</span><strong>{doneToday}<small> 份</small></strong></div><div><span>待巩固错题</span><strong>{wrongs.length}<small> 道</small></strong></div></div>
         <div className="section-heading"><h2>练习安排</h2><span className="muted small">共 {state.plans.length} 份 · {dateLabel(today)}</span></div><div className="plan-list">{[...state.plans].sort((a,b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)).map(planCard)}</div>
@@ -332,8 +405,8 @@ export default function FamilyApp() {
     </div>
     <div className="notice" role="status" aria-live="polite">{notice && <span>{notice}</span>}</div>
     {exit && <Dialog title="休息一下，稍后继续？" close={() => setExit(false)}><p>{storageWarning ? '当前只能暂存到页面关闭，请先通过设置导出数据。' : '当前答案和已完成的题目都已保存。回来后，点击“继续练习”即可接着做。'}</p><div className="button-row"><button className="secondary" onClick={() => setExit(false)}>继续做题</button><button className="primary" onClick={() => { setExit(false); setRunning(false); }}>保存并离开</button></div></Dialog>}
-    {settings && <Dialog title="关于这个体验版" close={() => setSettings(false)}><p>用自编的语文、数学题，体验家长布置和孩子练习的完整流程。</p><div className="settings-note"><strong>本地保存，同一浏览器内体验</strong><p>不收集真实身份信息。地址、浏览器或设备不同，记录也不同；清除浏览器数据会删除记录。角色切换只是演示，不提供权限保护。</p><p>默写使用中文键盘输入，不包含手写识别、录音或语音判分。</p><p>给家长阅读的报告请在“学习结果”中导出；下方 JSON 备份用于保存程序记录。</p></div><p className="muted small">复用代码版权：© 2026 wangzhang wu · MIT License。完整许可随源码保留；未使用上游课本原页、图片或音频包。</p><div className="button-row"><button className="secondary" onClick={exportData}><Download size={17}/>导出数据备份（JSON）</button><button className="text-button red-text" onClick={() => { setSettings(false); setConfirmReset(true); }}>重置体验数据</button></div></Dialog>}
-    {confirmReset && <Dialog title="重置本机体验数据？" close={() => setConfirmReset(false)}><p>这会删除家庭体验版的练习、结果和进行中的进度，并恢复一份当天示例练习。建议先导出备份。</p><div className="button-row"><button className="secondary" onClick={() => setConfirmReset(false)}>保留数据</button><button className="danger" onClick={reset}>确认重置</button></div></Dialog>}
+    {settings && <Dialog title="关于这个体验版" close={() => setSettings(false)}><p>用自编的语文、数学题，以及家长从本机导入的练习册题库，体验家长布置和孩子练习的完整流程。</p><div className="settings-note"><strong>本地保存，同一浏览器内体验</strong><p>不收集真实身份信息。地址、浏览器或设备不同，记录也不同；清除浏览器数据会删除记录。角色切换只是演示，不提供权限保护。</p><p>“我的题库”中导入的题目和答案只保存在当前浏览器，不上传服务器，也不会进入公开仓库。换设备或换浏览器需要重新导入，可用题库页的“导出备份”迁移。</p><p>默写使用中文键盘输入，不包含手写识别、录音或语音判分。</p><p>给家长阅读的报告请在“学习结果”中导出；下方 JSON 备份用于保存练习记录，不包含导入的题库。</p></div><p className="muted small">复用代码版权：© 2026 wangzhang wu · MIT License。完整许可随源码保留；未使用上游课本原页、图片或音频包。</p><div className="button-row"><button className="secondary" onClick={exportData}><Download size={17}/>导出数据备份（JSON）</button><button className="text-button red-text" onClick={() => { setSettings(false); setConfirmReset(true); }}>重置体验数据</button></div></Dialog>}
+    {confirmReset && <Dialog title="重置本机体验数据？" close={() => setConfirmReset(false)}><p>这会删除家庭体验版的练习、结果和进行中的进度，并恢复一份当天示例练习。“我的题库”中导入的本地题目不会删除，如需清除请到题库页操作。建议先导出备份。</p><div className="button-row"><button className="secondary" onClick={() => setConfirmReset(false)}>保留数据</button><button className="danger" onClick={reset}>确认重置</button></div></Dialog>}
   </div>;
 }
 

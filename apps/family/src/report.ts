@@ -56,7 +56,7 @@ export function learningReport(attempts: Attempt[], now = new Date(), options?:{
 <div class="summary"><div>完成练习<strong>${records.length} 份</strong></div><div>客观题正确率<strong>${ratio}</strong></div><div>待巩固作答<strong>${wrong} 道</strong></div><div>仿写记录<strong>${responses.length-objective.length} 道</strong></div></div>
 <p class="note">客观题共 ${objective.length} 道，答对 ${right} 道；累计得分 ${score} / ${total} 分。仿写保存原文，供家长阅读交流，不自动判分。待巩固作答按所选练习累计，同一题多次作答会分别列出。</p>
 <p class="print-hint">这是可离线打开的学习报告。点击上方按钮可打印，或在浏览器打印窗口选择“另存为 PDF”。</p>
-${sections}<footer class="footer">聪聪学堂 · 家庭练习体验版。本报告使用本浏览器保存的练习结果生成；练习内容为自编示例，生字与必背要求请以学校教学安排为准。</footer>
+${sections}<footer class="footer">聪聪学堂 · 家庭练习体验版。本报告使用本浏览器保存的练习结果生成；练习内容为自编示例或家长本地导入，生字与必背要求请以学校教学安排为准。若练习来自本地题库，本报告含题目与答案，请只在家庭内部保存。</footer>
 </main></body></html>`;
   return { filename: `聪聪学堂-${records.length===1?'本次学习报告':'学习报告'}-${localDate(now)}.html`, html };
 }

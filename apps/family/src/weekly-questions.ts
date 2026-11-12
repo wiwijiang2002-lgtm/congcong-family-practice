@@ -78,6 +78,12 @@ const meanings:Record<string,[string,string,string]>={
 };
 export function focusFor(question: FamilyQuestion): Focus {
   const source=question.weekly ? BANK.find(q=>q.id===question.weekly!.sourceId)??question : question;
+  // Locally imported questions have no authored variant pool. Keep the original
+  // mistake visible, group it by its workbook knowledge point, and never claim mastery.
+  if(source.origin==='local') {
+    const label=source.knowledge_point||source.unit||'本地题库题';
+    return {key:`local:${source.subject}:${label}`,label:`${label}（本地题库）`,subject:source.subject,source,supported:false,note:'这是家长从练习册导入的本地题目，目前不参与自动变式或隔日复测。可以先订正原题；自动巩固仍只覆盖内置题库的语文词语/古诗和数学计算技能。'};
+  }
   const math=mathIds[source.id];
   if(source.subject==='数学'&&math) return {key:`math:${math}`,label:names[math],subject:'数学',source,supported:true,note:'换数字或情境，练习同一个运算与数量关系。'};
   const poem=Object.keys(poems).find(title=>source.question.includes(`《${title}》`)&&source.mode==='dictation');

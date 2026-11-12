@@ -1,6 +1,6 @@
 import type { Question } from '@cstf/core/types';
-export interface FamilyQuestion extends Question { subject: '语文' | '数学'; mode?: 'dictation' | 'writing'; lessonId?: string; weekly?: { key: string; label: string; sourceId: number; stage: 'practice' | 'check'; signature: string } }
-export interface Course { id: string; subject: '语文' | '数学'; title: string; section: string; edition: 'tongbian-2026' | 'sujiao-math'; expansion: string; questions: FamilyQuestion[] }
+export interface FamilyQuestion extends Question { subject: '语文' | '数学'; mode?: 'dictation' | 'writing' | 'text'; lessonId?: string; weekly?: { key: string; label: string; sourceId: number; stage: 'practice' | 'check'; signature: string }; /** Questions imported by a parent stay in this browser only. */ origin?: 'local'; /** Optional workbook unit/chapter label for imported questions. */ unit?: string }
+export interface Course { id: string; subject: '语文' | '数学'; title: string; section: string; edition: 'tongbian-2026' | 'sujiao-math' | 'local'; expansion: string; questions: FamilyQuestion[]; /** Imported unit size before the 12-question practice cap. */ available?: number; /** Bank that owns an imported course. */ bankId?: string }
 const make = (id: number, subject: FamilyQuestion['subject'], type: Question['type'], question: string, answer: string, knowledge_point: string, explanation: string, extra: Partial<FamilyQuestion> = {}): FamilyQuestion => ({ id, subject, type, question, answer, knowledge_point, explanation, score: 10, difficulty: 1, options: [], ...extra });
 // Newly authored demo exercises and expansions. Words are illustrative vocabulary,
 // not an asserted official spelling list. No modern textbook passage is reproduced.
@@ -94,5 +94,5 @@ export const TEMPLATES=[
   {id:'chinese',name:'登鹳雀楼 · 默写与仿写',note:'生字词、古诗片段与仿写',minutes:8,ids:demoChinese.questions.map(q=>q.id)},
   {id:'math',name:'苏教二上 · 表内乘法',note:'选择题与数字填空',minutes:6,ids:math[0].questions.map(q=>q.id)},
 ];
-export const typeName=(q:FamilyQuestion)=>q.mode==='writing'?'仿写拓展':q.mode==='dictation'?'默写':q.type==='choice'?'选择':'填空';
-export const editionName=(edition:Course['edition'])=>edition==='tongbian-2026'?'统编语文 · 上游2026秋版目录':'苏教数学 · 新课标单元参考';
+export const typeName=(q:FamilyQuestion)=>q.mode==='writing'?'仿写拓展':q.mode==='dictation'?'默写':q.mode==='text'?'填写':q.type==='choice'?'选择':'填空';
+export const editionName=(edition:Course['edition'])=>edition==='tongbian-2026'?'统编语文 · 上游2026秋版目录':edition==='local'?'家长本地题库 · 仅本浏览器':'苏教数学 · 新课标单元参考';

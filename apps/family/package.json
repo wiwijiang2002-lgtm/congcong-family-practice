@@ -6,7 +6,7 @@
     "dev": "next dev -p 4173 -H 0.0.0.0",
     "build": "next build",
     "type-check": "tsc --noEmit",
-    "test": "tsx --test src/domain.test.ts src/report.test.ts src/weekly.test.ts",
+    "test": "tsx --test src/domain.test.ts src/report.test.ts src/weekly.test.ts src/local-bank.test.ts",
     "start": "node server.mjs"
   },
   "dependencies": {
