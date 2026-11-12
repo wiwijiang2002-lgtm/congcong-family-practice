@@ -1,0 +1,23 @@
+{
+  "repository": "https://github.com/wuwangzhang1216/congcong-school",
+  "branch": "main",
+  "commit": "5540813185ae0867878c101abc083cad13a35fbd",
+  "verified_on": "2026-11-12",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2026 wangzhang wu",
+  "scope": "二年级上册：统编语文、苏教数学；本地家庭练习体验",
+  "upstream_source_modified": false,
+  "new_workspace": "apps/family",
+  "reused": [
+    "apps/web/src/components/Mascot.tsx",
+    "apps/web/src/components/question/ChoiceQuestion.tsx",
+    "apps/web/src/components/question/FillBlankQuestion.tsx",
+    "apps/web/src/components/question/FillBlankTextQuestion.tsx",
+    "apps/web/src/components/question/QuestionPrompt.tsx",
+    "apps/web/src/app/globals.css",
+    "apps/web/tailwind.config.ts",
+    "packages/core/src/types.ts",
+    "packages/core/src/grade.ts"
+  ],
+  "release_resources_included": false
+}

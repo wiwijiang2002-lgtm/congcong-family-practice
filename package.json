@@ -1,0 +1,21 @@
+{
+  "name": "china-textbook-study-free-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@csf/family-demo",
+    "build": "node scripts/build-static.mjs",
+    "test": "npm run test --workspace=@csf/family-demo",
+    "type-check": "npm run type-check --workspace=@csf/family-demo",
+    "family:build": "npm run build --workspace=@csf/family-demo",
+    "family:dev": "npm run dev --workspace=@csf/family-demo",
+    "family:test": "npm run test --workspace=@csf/family-demo"
+  },
+  "devDependencies": {
+    "react-test-renderer": "19.2.5"
+  }
+}

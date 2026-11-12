@@ -1,0 +1,11 @@
+import { spawnSync } from 'node:child_process';
+import { cpSync, mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const next=resolve(root,'node_modules/next/dist/bin/next');
+const result=spawnSync(process.execPath,[next,'build'],{cwd:resolve(root,'apps/family'),stdio:'inherit',env:{...process.env,NEXT_TELEMETRY_DISABLED:'1'}});
+if(result.status!==0)process.exit(result.status??1);
+mkdirSync(resolve(root,'dist'),{recursive:true});
+cpSync(resolve(root,'apps/family/out'),resolve(root,'dist'),{recursive:true});
+console.log('Static website ready in dist/');
