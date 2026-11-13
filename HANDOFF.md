@@ -19,6 +19,7 @@
 - `apps/family/src/domain.ts`：作答、判分、持久化数据校验和状态推进。
 - `apps/family/src/local-bank.ts`、`LocalBankPanel.tsx`、`local-bank.test.ts`：家长本地题库的解析、校验、浏览器存储、题库管理和题库测试。
 - `apps/family/src/suggestions.ts`、`suggestions.test.ts`、`WeakSuggestionPanel.tsx`：按最近 7 天错题从本地题库找未做过的同知识点题目，生成家长确认后才布置的建议练习。
+- `apps/family/src/selection.ts`、`selection.test.ts`：布置页“全选当前列表/清空已选”的批量选择，去重并遵守每份 12 道上限。
 - `apps/family/src/weekly.ts`、`weekly-questions.ts`、`WeeklyPanel.tsx`：一周错题、变式题池、复测规则和界面。
 - `apps/family/src/report.ts`：可读报告及文本转义。
 - `apps/family/app/family.css`：家庭版响应式样式。
@@ -28,7 +29,7 @@
 
 Node.js 22；仓库根目录依次运行 `npm ci`、`npm test`、`npm run dev`。开发网址为 `http://localhost:4173`。`npm run build` 生成根路径静态站 `dist/`；GitHub Pages 工作流通过 `FAMILY_BASE_PATH` 自动处理仓库子路径。先查看检查结果，再推送 main；程序推送会自动更新公开网站。
 
-59 项检查已在 Windows 本地通过（其中新增 12 项本地题库检查和 8 项弱点建议检查）；生产静态构建和 Chromium 浏览器端到端闭环已验证。GitHub Ubuntu、公开网址和真实 iPad Safari 尚待本轮推送后复验；家庭无 VPN 网络仍需用户验证。更多证据见 `VALIDATION.md`、`DEPLOYMENT.md`。
+61 项检查已在 Windows 本地通过（其中新增 12 项本地题库检查、8 项弱点建议检查和 2 项批量选择检查）；生产静态构建和 Chromium 浏览器端到端闭环已验证。GitHub Ubuntu、公开网址和真实 iPad Safari 尚待本轮推送后复验；家庭无 VPN 网络仍需用户验证。更多证据见 `VALIDATION.md`、`DEPLOYMENT.md`。
 
 ## 在 DeepSeek Harness 中继续
 

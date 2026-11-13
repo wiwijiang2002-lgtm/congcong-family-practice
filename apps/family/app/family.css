@@ -60,3 +60,11 @@
 @media(max-width:700px){.suggestion-heading{flex-direction:column;gap:6px}.suggestion-card{padding:15px}.suggestion-zero{flex-wrap:wrap}.suggestion-zero .secondary{width:100%}}
 
 .suggestion-fallback{display:flex;align-items:flex-start;gap:6px;background:#fbf5e9;border:1px solid #eee2cc;border-radius:9px;padding:8px 10px;margin:10px 0 0;font-size:11px;line-height:1.7;color:#8d754f}
+
+/* Batch selection in the parent question picker. */
+.batch-select-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#f6f9f2;border:1px solid #e2eadb;border-radius:12px;padding:10px 14px;margin:-6px 0 16px}
+.batch-select-info{display:flex;align-items:center;gap:7px;font-size:11px;color:#7f916e}
+.batch-select-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.batch-select-actions .secondary{min-height:40px;padding:7px 13px;font-size:12px}
+.batch-select-actions .text-button{font-size:12px}
+@media(max-width:700px){.batch-select-bar{align-items:flex-start;flex-direction:column}.batch-select-actions{width:100%}.batch-select-actions .secondary{flex:1}}
