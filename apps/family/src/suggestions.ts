@@ -3,6 +3,7 @@ import type { State } from './domain';
 import type { LocalBank } from './local-bank';
 import { weeklyTopics, type WeeklyTopic } from './weekly';
 
+export type SuggestionBasis = 'tag' | 'unit' | 'bank';
 /** A weak topic plus unused local-bank questions that look like the same skill. */
 export interface BankSuggestion {
   topic: WeeklyTopic;
@@ -11,6 +12,8 @@ export interface BankSuggestion {
   /** Number of unused matching questions found before the per-topic cap. */
   matched: number;
   bankNames: string[];
+  /** tag = same knowledge point; unit/bank = fallback for untagged questions. */
+  basis: SuggestionBasis;
 }
 export interface SuggestionOptions {
   perTopic?: number;
@@ -52,8 +55,13 @@ function normalize(value: string): string {
 
 const SPLIT = /[·•|/、,，;；:：()（）《》【】\[\]\s的]+/;
 
-function displayLabel(topic: WeeklyTopic): string {
-  return topic.label.replace(/（本地题库）$/, '');
+function displayLabel(topic: WeeklyTopic, banks: LocalBank[]): string {
+  const raw = topic.label.replace(/（本地题库）$/, '');
+  if (!topic.key.startsWith('local:') || phrasesFor(topic).length > 0) return raw;
+  const unit = topic.source.unit?.trim();
+  if (unit) return `${unit}（未标注知识点）`;
+  const bank = banks.find(item => `local-${item.id}` === topic.source.lessonId);
+  return bank && bank.name !== '本地题库' ? `${bank.name}（未标注知识点）` : '本地题库（未标注知识点）';
 }
 
 function phrasesFor(topic: WeeklyTopic): string[] {
@@ -109,6 +117,38 @@ export function recentWeakTopics(state: State, now = new Date()): WeeklyTopic[] 
   );
 }
 
+function usable<T extends { question: FamilyQuestion }>(items: T[], usedIds: Set<number>, usedKeys: Set<string>): T[] {
+  return items.filter(item => !usedIds.has(item.question.id) && !usedKeys.has(questionKey(item.question)));
+}
+
+function fallbackLabel(topic: WeeklyTopic, banks: LocalBank[], basis: 'unit' | 'bank'): string {
+  const unit = topic.source.unit?.trim();
+  if (basis === 'unit' && unit) return `${unit}（未标注知识点）`;
+  const bank = banks.find(item => `local-${item.id}` === topic.source.lessonId);
+  return bank?.name ? `${bank.name}（未标注知识点）` : '本地题库（未标注知识点）';
+}
+
+/**
+ * Fallback for imported questions without a usable knowledge point. Prefer the
+ * same workbook unit; otherwise use other questions from the same imported bank.
+ * The caller still shows this as a needs-review suggestion.
+ */
+function fallbackMatches(
+  topic: WeeklyTopic,
+  pool: { question: FamilyQuestion; bank: LocalBank; bankIndex: number; index: number }[],
+  usedIds: Set<number>,
+  usedKeys: Set<string>,
+): { matches: { question: FamilyQuestion; bank: LocalBank; bankIndex: number; index: number }[]; basis: 'unit' | 'bank' | null } {
+  if (!topic.key.startsWith('local:') || !topic.source.lessonId) return { matches: [], basis: null };
+  const bankItems = usable(pool.filter(item => item.question.lessonId === topic.source.lessonId), usedIds, usedKeys);
+  const unit = topic.source.unit?.trim();
+  if (unit) {
+    const sameUnit = bankItems.filter(item => (item.question.unit ?? '').trim() === unit);
+    if (sameUnit.length) return { matches: sameUnit.sort((a, b) => a.bankIndex - b.bankIndex || a.index - b.index), basis: 'unit' };
+  }
+  return { matches: bankItems.sort((a, b) => a.bankIndex - b.bankIndex || a.index - b.index), basis: bankItems.length ? 'bank' : null };
+}
+
 /**
  * Suggest unused local-bank questions for recent weak topics. This only builds a
  * proposal for a parent to review; it never creates or publishes a plan itself.
@@ -130,26 +170,31 @@ export function suggestBankPractice(state: State, banks: LocalBank[], now = new 
     .filter(question => question.score > 0)
     .map((question, index) => ({ question, bank, bankIndex, index })));
 
-  const ranked = weak.map(topic => {
+  const proposals = weak.map(topic => {
     const phrases = phrasesFor(topic);
-    const matches = pool
+    const tagMatches = pool
       .filter(item => !usedIds.has(item.question.id) && !usedKeys.has(questionKey(item.question)))
       .map(item => ({ ...item, score: matchScore(phrases, topic, item.question) }))
       .filter(item => item.score > 0)
       .sort((a, b) => b.score - a.score || a.bankIndex - b.bankIndex || a.index - b.index);
-    return { topic, matches };
-  }).filter(item => item.matches.length > 0);
+    if (tagMatches.length) return { topic, label: displayLabel(topic, banks), matches: tagMatches, basis: 'tag' as const };
+    if (topic.key.startsWith('local:') && !phrases.length) {
+      const fallback = fallbackMatches(topic, pool, usedIds, usedKeys);
+      if (fallback.matches.length && fallback.basis) {
+        return { topic, label: fallbackLabel(topic, banks, fallback.basis), matches: fallback.matches, basis: fallback.basis };
+      }
+    }
+    return null;
+  }).filter((item): item is NonNullable<typeof item> => item !== null);
 
-  if (!ranked.length) {
+  if (!proposals.length) {
     const topic = weak[0];
-    return [{ topic, label: displayLabel(topic), questions: [], matched: 0, bankNames: [] }];
+    return [{ topic, label: displayLabel(topic, banks), questions: [], matched: 0, bankNames: [], basis: 'tag' }];
   }
 
   const out: BankSuggestion[] = [];
-  for (const item of ranked.slice(0, maxTopics)) {
-    const available = item.matches.filter(candidate =>
-      !usedIds.has(candidate.question.id) && !usedKeys.has(questionKey(candidate.question))
-    );
+  for (const item of proposals.slice(0, maxTopics)) {
+    const available = usable(item.matches, usedIds, usedKeys);
     const picked: FamilyQuestion[] = [];
     for (const candidate of available) {
       if (picked.length >= perTopic) break;
@@ -158,7 +203,7 @@ export function suggestBankPractice(state: State, banks: LocalBank[], now = new 
     }
     if (!picked.length) continue;
     const bankNames = [...new Set(picked.map(question => bankByLesson.get(question.lessonId ?? '')?.name ?? '').filter(Boolean))];
-    out.push({ topic: item.topic, label: displayLabel(item.topic), questions: picked, matched: available.length, bankNames });
+    out.push({ topic: item.topic, label: item.label, questions: picked, matched: available.length, bankNames, basis: item.basis });
   }
-  return out.length ? out : [{ topic: weak[0], label: displayLabel(weak[0]), questions: [], matched: 0, bankNames: [] }];
+  return out.length ? out : [{ topic: weak[0], label: displayLabel(weak[0], banks), questions: [], matched: 0, bankNames: [], basis: 'tag' }];
 }

@@ -51,6 +51,7 @@ test('A local-bank weak point suggests unused questions with the same knowledge 
   assert.ok(suggestions[0].questions.every(question => question.id !== source.questions[0].id));
   assert.ok(suggestions[0].questions.every(question => question.knowledge_point === '坐井观天 · 看拼音写汉字'));
   assert.equal(suggestions[0].bankNames[0], '坐井观天题库');
+  assert.equal(suggestions[0].basis, 'tag');
 });
 
 test('A built-in weakness can suggest local-bank questions tagged with the same math skill', () => {
@@ -112,12 +113,29 @@ test('An unassigned but unused bank question is suggested; a question already in
   assert.equal(suggestions[0].matched, 0);
 });
 
-test('Untagged local questions are not matched to a vague unit-only weakness', () => {
-  const source = bank('未标注题库', [draft(1, '本地题库'), draft(2, '本地题库')], 600);
+test('Untagged local questions fall back to the same unit and explain why', () => {
+  const source = bank('未标注题库', [draft(1, '本地题库'), draft(2, '本地题库'), draft(3, '本地题库')], 600);
   const state = addWrong(empty, source.questions[0]);
   const suggestions = suggestBankPractice(state, [source], new Date());
   assert.equal(suggestions.length, 1);
-  assert.equal(suggestions[0].questions.length, 0);
+  assert.equal(suggestions[0].basis, 'unit');
+  assert.equal(suggestions[0].questions.length, 2);
+  assert.match(suggestions[0].label, /未标注知识点/);
+  assert.ok(suggestions[0].questions.every(question => question.id !== source.questions[0].id));
+});
+
+test('Untagged local questions with no unit fall back to the same imported bank', () => {
+  const rows = [
+    { ...draft(1, '本地题库'), unit: '' },
+    { ...draft(2, '本地题库'), unit: '' },
+    { ...draft(3, '本地题库'), unit: '' },
+  ];
+  const source = bank('未标注题库', rows, 601);
+  const state = addWrong(empty, source.questions[0]);
+  const suggestions = suggestBankPractice(state, [source], new Date());
+  assert.equal(suggestions.length, 1);
+  assert.equal(suggestions[0].basis, 'bank');
+  assert.equal(suggestions[0].questions.length, 2);
 });
 
 test('Writing-only bank questions are not proposed as an auto-graded practice', () => {
