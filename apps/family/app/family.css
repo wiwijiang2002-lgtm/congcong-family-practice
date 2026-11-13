@@ -68,3 +68,8 @@
 .batch-select-actions .secondary{min-height:40px;padding:7px 13px;font-size:12px}
 .batch-select-actions .text-button{font-size:12px}
 @media(max-width:700px){.batch-select-bar{align-items:flex-start;flex-direction:column}.batch-select-actions{width:100%}.batch-select-actions .secondary{flex:1}}
+
+.batch-range{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:11px;color:#7f916e}
+.batch-range input{width:60px;min-height:38px;padding:4px 6px;text-align:center;font-size:16px}
+.batch-range .secondary{min-height:38px;padding:6px 12px;font-size:12px}
+@media(max-width:700px){.batch-range{width:100%}.batch-range .secondary{flex:1}}

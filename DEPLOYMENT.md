@@ -55,7 +55,7 @@ npm run build
 - `.openai/hosting.json`：保留内置托管站点标识和静态目录。
 - `apps/family/src/local-bank.ts`、`LocalBankPanel.tsx`、`local-bank.test.ts`、`download.ts`：家长本地题库导入、管理和测试；`FamilyApp.tsx` 接入题库导航、布置页和自由选课。
 - `apps/family/src/suggestions.ts`、`suggestions.test.ts`、`WeakSuggestionPanel.tsx`：按最近 7 天错题从本地题库生成家长确认后布置的弱点建议练习。
-- `apps/family/src/selection.ts`、`selection.test.ts`：布置页批量勾选当前筛选列表，自动遵守 12 道上限。
+- `apps/family/src/selection.ts`、`selection.test.ts`：布置页按序号范围批量选择题目，自动遵守 12 道上限。
 - `本地题库导入说明.md`：导入格式、隐私边界和真实题目文件的提供要求。
 - `README.md`、`HANDOFF.md`、本文件：维护、部署与更换开发工具的交接说明。
 

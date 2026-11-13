@@ -19,7 +19,7 @@
 - `apps/family/src/domain.ts`：作答、判分、持久化数据校验和状态推进。
 - `apps/family/src/local-bank.ts`、`LocalBankPanel.tsx`、`local-bank.test.ts`：家长本地题库的解析、校验、浏览器存储、题库管理和题库测试。
 - `apps/family/src/suggestions.ts`、`suggestions.test.ts`、`WeakSuggestionPanel.tsx`：按最近 7 天错题从本地题库找未做过的同知识点题目，生成家长确认后才布置的建议练习。
-- `apps/family/src/selection.ts`、`selection.test.ts`：布置页“全选当前列表/清空已选”的批量选择，去重并遵守每份 12 道上限。
+- `apps/family/src/selection.ts`、`selection.test.ts`：布置页按当前列表序号范围批量选择（如第 13–24 道）并清空，去重且遵守每份 12 道上限。
 - `apps/family/src/weekly.ts`、`weekly-questions.ts`、`WeeklyPanel.tsx`：一周错题、变式题池、复测规则和界面。
 - `apps/family/src/report.ts`：可读报告及文本转义。
 - `apps/family/app/family.css`：家庭版响应式样式。

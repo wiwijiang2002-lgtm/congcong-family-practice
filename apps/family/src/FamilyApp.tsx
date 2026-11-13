@@ -16,7 +16,7 @@ import { scheduleWeekly, weeklyTopics } from './weekly';
 import { addBank, decodeBankStore, emptyBankStore, localCourses, LOCAL_BANK_KEY, saveBankStore, type DraftQuestion, type LocalBank, type LocalBankStore } from './local-bank';
 import { LocalBankPanel } from './LocalBankPanel';
 import { WeakSuggestionPanel } from './WeakSuggestionPanel';
-import { addVisibleSelection } from './selection';
+import { addRangeSelection } from './selection';
 import { download } from './download';
 
 type Role = 'child' | 'parent';
@@ -84,6 +84,8 @@ export default function FamilyApp() {
   const [course, setCourse] = useState<Course | null>(null);
   const [builderCourse, setBuilderCourse] = useState('');
   const [builderSearch, setBuilderSearch] = useState('');
+  const [rangeStart, setRangeStart] = useState(1);
+  const [rangeEnd, setRangeEnd] = useState(12);
   const [custom, setCustom] = useState<FamilyQuestion[]>([]);
   const [customPrompt, setCustomPrompt] = useState('');
   const [customAnswer, setCustomAnswer] = useState('');
@@ -286,16 +288,12 @@ export default function FamilyApp() {
     setTab('plans'); setBuilder(true); setResultId(null); setRunning(false);
     setNotice('已把建议题目放进布置页，请核对题目和答案后再布置。');
   }
-  function selectVisibleQuestions() {
-    const visible = builderShown.map(question => question.id);
-    const remaining = builderShown.filter(question => !selected.includes(question.id)).length;
-    if (!remaining) { setNotice('当前筛选列表已经全部选中。'); return; }
-    if (selected.length >= 12) { setNotice('已选满 12 道，请先取消一些题目再批量选择。'); return; }
-    const result = addVisibleSelection(selected, visible);
+  function selectRangeQuestions() {
+    const result = addRangeSelection(selected, builderShown.map(question => question.id), shownRangeStart, shownRangeEnd);
+    if (result.error) { setNotice(result.error); return; }
+    if (!result.added) { setNotice('这段题目已经全部选中。'); return; }
     setSelected(result.ids);
-    setNotice(result.skipped
-      ? `已选 ${result.added} 道；每份最多 12 道，另外 ${result.skipped} 道没有加入。`
-      : `已选中当前列表 ${result.added} 道。`);
+    setNotice(`已选中当前列表第 ${shownRangeStart}–${shownRangeEnd} 道，新增 ${result.added} 道。`);
   }
   function clearSelectedQuestions() {
     if (!selected.length) { setNotice('当前没有已选题目。'); return; }
@@ -333,6 +331,9 @@ export default function FamilyApp() {
       : [...selectedPool, ...custom.filter(question => !selected.includes(question.id))];
   const builderFiltered = builderItems.filter(q => (subject === '全部' || q.subject === subject) && (!builderSearch.trim() || q.question.includes(builderSearch.trim()) || q.knowledge_point.includes(builderSearch.trim()) || (q.unit ?? '').includes(builderSearch.trim())));
   const builderShown = builderFiltered.slice(0, 100);
+  const rangeMax = Math.max(1, builderShown.length);
+  const shownRangeStart = Math.min(Math.max(1, rangeStart), rangeMax);
+  const shownRangeEnd = Math.min(Math.max(1, rangeEnd), rangeMax);
   const visibleCourses = (courseSubject === '数学'
     ? [...COURSES.filter(c => c.subject === '数学'), ...importedCourses.filter(c => c.subject === '数学')]
     : [...COURSES.filter(c => c.subject === '语文' && c.edition === edition), ...importedCourses.filter(c => c.subject === '语文')]
@@ -393,10 +394,10 @@ export default function FamilyApp() {
         <div className="course-toolbar"><label className="muted small" style={{flex:1}}>按课文 / 单元选择<select aria-label="布置练习的课文或单元" value={builderCourse} onChange={e=>{const value=e.target.value;setBuilderCourse(value);setBuilderSearch('');setSubject('全部');if(value.startsWith('local:')){const bank=bankStore.banks.find(b=>`local:${b.id}`===value);setSelected([]);if(bank){setName(`${bank.name} · 本地练习`.slice(0,40));setMinutes(10);setPlanDate(today);setNotice('勾选要布置的本地题目，每份最多 12 道。');}}else{const c=COURSES.find(c=>c.id===value);if(c){setSelected(c.questions.map(q=>q.id));setName(`${c.title} · 课后练习`);setMinutes(c.subject==='语文'?8:6);}}}}><option value="">当前组合</option>{(['tongbian-2026','sujiao-math'] as const).map(ed=><optgroup key={ed} label={editionName(ed)}>{COURSES.filter(c=>c.edition===ed).map(c=><option key={c.id} value={c.id}>{c.section} · {c.title}</option>)}</optgroup>)}{bankStore.banks.length>0&&<optgroup label="家长本地题库 · 仅本机">{bankStore.banks.map(b=><option key={b.id} value={`local:${b.id}`}>{b.name}（{b.questions.length} 道）</option>)}</optgroup>}</select></label></div>
         <div className="builder-meta panel"><label>练习名称<input value={name} maxLength={40} onChange={e => setName(e.target.value)} placeholder="给练习起个名字"/></label><label>练习日期<input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)}/></label><label>预计分钟<input type="number" min="1" max="60" value={minutes} onChange={e => setMinutes(Number(e.target.value))}/></label></div>
         <div className="section-heading"><h2>挑选题目 <span className="count-pill">{selected.length} / 12</span></h2><div className="filter-tabs" aria-label="按学科筛选">{['全部','语文','数学'].map(s => <button key={s} aria-pressed={subject===s} onClick={() => setSubject(s)}>{s}</button>)}</div></div>
-        <div className="batch-select-bar"><span className="batch-select-info"><ListChecks size={16}/>当前列表 {builderShown.length} 道 · 已选 {selected.length} / 12</span><div className="batch-select-actions"><button className="secondary" disabled={!builderShown.length || selected.length >= 12 || builderShown.every(q => selected.includes(q.id))} onClick={selectVisibleQuestions}>全选当前列表</button><button className="text-button" disabled={!selected.length} onClick={clearSelectedQuestions}>清空已选</button></div></div>
+        <div className="batch-select-bar"><span className="batch-select-info"><ListChecks size={16}/>当前列表 {builderShown.length} 道 · 已选 {selected.length} / 12</span><div className="batch-range"><span>从第</span><input type="number" min={1} max={rangeMax} inputMode="numeric" aria-label="批量选择起始序号" value={shownRangeStart} onChange={e => setRangeStart(Number(e.target.value))}/><span>道到第</span><input type="number" min={1} max={rangeMax} inputMode="numeric" aria-label="批量选择结束序号" value={shownRangeEnd} onChange={e => setRangeEnd(Number(e.target.value))}/><span>道</span><button className="secondary" disabled={!builderShown.length || selected.length >= 12} onClick={selectRangeQuestions}>选中这段</button></div><button className="text-button" disabled={!selected.length} onClick={clearSelectedQuestions}>清空已选</button></div>
         <p className="muted small question-bank-note">{localBuilderBank ? `来自《${localBuilderBank.name}》的本地题目，只保存在当前浏览器；勾选后随练习保存题目快照，答案不会上传。` : selectedLocal ? '这份建议练习包含本地题库题目，只保存在当前浏览器；请核对题干、答案和选项后再布置。' : '二年级上册自编示例题。默写与填空自动判分，仿写保存原文供家长查看；请先预览并按学校要求调整。'}</p>
         {localBuilderBank && <div className="course-toolbar"><input type="search" className="course-search" aria-label="在本地题库中搜索题干" value={builderSearch} onChange={e=>setBuilderSearch(e.target.value)} placeholder="搜索题干、知识点或单元"/><span className="muted small">共 {localBuilderBank.questions.length} 道，当前显示 {builderFiltered.length} 道{localBuilderBank.questions.length>100?'（最多显示前 100 道，可搜索缩小范围）':''}</span></div>}
-        <div className="selection-list">{builderShown.map(q => <label key={q.id} className={`selection-card ${selected.includes(q.id) ? 'selected' : ''}`}><input type="checkbox" checked={selected.includes(q.id)} onChange={e => setSelected(e.target.checked ? (selected.length<12?[...selected,q.id]:selected) : selected.filter(id => id!==q.id))}/><span><span className="card-kicker">{q.subject} · {typeName(q)} · {q.knowledge_point}{q.origin === 'local' ? ' · 本地' : ''}</span><strong>{q.question}</strong><details onClick={e => e.stopPropagation()}><summary>预览答案与解析</summary><p>{responseAnswer(q.answer,q)} · {q.explanation}</p></details></span></label>)}</div>
+        <div className="selection-list">{builderShown.map((q, index) => <label key={q.id} className={`selection-card ${selected.includes(q.id) ? 'selected' : ''}`}><input type="checkbox" checked={selected.includes(q.id)} onChange={e => setSelected(e.target.checked ? (selected.length<12?[...selected,q.id]:selected) : selected.filter(id => id!==q.id))}/><span><span className="card-kicker">第 {index+1} 道 · {q.subject} · {typeName(q)} · {q.knowledge_point}{q.origin === 'local' ? ' · 本地' : ''}</span><strong>{q.question}</strong><details onClick={e => e.stopPropagation()}><summary>预览答案与解析</summary><p>{responseAnswer(q.answer,q)} · {q.explanation}</p></details></span></label>)}</div>
         {builderShown.length === 0 && <div className="empty compact"><BookOpen size={26}/><h3>没有匹配的题目</h3><p>换一个关键词，或切换学科。</p></div>}
         <section className="panel custom-question"><h3>补充老师要求的默写内容</h3><p className="muted small">可填写生字词与拼音提示，或需要背诵的短片段。只保存在本地这份练习中。</p><label>题干 / 拼音 / 背诵提示<input maxLength={180} value={customPrompt} onChange={e=>setCustomPrompt(e.target.value)} placeholder="例如：看拼音写词语：zhī shi"/></label><label>标准答案<textarea maxLength={240} rows={2} value={customAnswer} onChange={e=>setCustomAnswer(e.target.value)} placeholder="例如：知识（或老师要求背诵的短片段）"/></label><button className="secondary" disabled={!customPrompt.trim()||!customAnswer.trim()||selected.length>=12} onClick={addCustom}><Plus size={17}/>加入这份练习</button></section>
         <div className="builder-footer"><span>已选 <strong>{selected.length}</strong> 道题<span className="muted small"> · 仿写不计分</span></span><button className="primary" onClick={publish} disabled={!selected.length || !name.trim() || !planDate || !Number.isInteger(minutes) || minutes<1 || minutes>60}>布置练习 <ChevronRight size={18}/></button></div>

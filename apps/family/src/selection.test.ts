@@ -1,24 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addVisibleSelection } from './selection';
+import { addRangeSelection } from './selection';
 
-test('Batch selection adds visible questions without duplicates and respects the 12-question cap', () => {
-  const result = addVisibleSelection([1, 2, 3], [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
-  assert.deepEqual(result.ids.slice(0, 3), [1, 2, 3]);
-  assert.equal(result.ids.length, 12);
-  assert.equal(result.added, 9);
-  assert.equal(result.skipped, 3);
-  assert.equal(result.full, true);
+test('Range selection can pick an arbitrary later block instead of the first 12', () => {
+  const visible = Array.from({ length: 20 }, (_, index) => index + 1);
+  const result = addRangeSelection([], visible, 13, 18);
+  assert.equal(result.error, null);
+  assert.deepEqual(result.ids, [13, 14, 15, 16, 17, 18]);
+  assert.equal(result.added, 6);
+  const tail = addRangeSelection([], visible, 9, 20);
+  assert.equal(tail.error, null);
+  assert.deepEqual(tail.ids, [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+  assert.equal(tail.added, 12);
 });
 
-test('Batch selection reports no additions when already full or everything is selected', () => {
-  const full = addVisibleSelection([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], [13, 14]);
-  assert.equal(full.added, 0);
-  assert.equal(full.skipped, 2);
-  assert.equal(full.full, true);
-  const already = addVisibleSelection([1, 2], [1, 2]);
-  assert.deepEqual(already.ids, [1, 2]);
-  assert.equal(already.added, 0);
-  assert.equal(already.skipped, 0);
-  assert.equal(already.full, false);
+test('Range selection rejects invalid ranges and going over 12; already-selected items are not duplicated', () => {
+  const visible = Array.from({ length: 20 }, (_, index) => index + 1);
+  assert.match(addRangeSelection([], visible, 21, 22).error!, /有效范围/);
+  assert.match(addRangeSelection([], visible, 10, 9).error!, /有效范围/);
+  assert.match(addRangeSelection(Array.from({ length: 10 }, (_, index) => index + 1), visible, 11, 20).error!, /超过/);
+  const overlap = addRangeSelection([13, 14], visible, 13, 16);
+  assert.equal(overlap.error, null);
+  assert.deepEqual(overlap.ids, [13, 14, 15, 16]);
+  assert.equal(overlap.added, 2);
 });
