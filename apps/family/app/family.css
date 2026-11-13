@@ -37,3 +37,24 @@
 
 
 .page-heading>.button-row{margin-top:0;flex-shrink:0}
+
+/* Weakness-driven suggestions from the parent's local bank. */
+.suggestion-panel{margin:0 0 28px;background:#fbfdf8;border-color:#dfead5}
+.suggestion-panel .section-heading h2{display:flex;align-items:center;gap:8px}
+.suggestion-intro{margin:-6px 0 16px}
+.suggestion-list{display:grid;gap:12px}
+.suggestion-card{border:1px solid #e1e9d9;border-radius:14px;padding:17px 19px;background:#fff}
+.suggestion-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.suggestion-heading h3{font-size:16px;margin:4px 0 5px}
+.suggestion-heading p{overflow-wrap:anywhere}
+.suggestion-preview{margin-top:12px;border-top:1px solid #edf1e7;padding-top:10px;font-size:12px;color:#809272}
+.suggestion-preview summary{cursor:pointer;min-height:36px;font-weight:600;color:#668151}
+.suggestion-preview ol{margin:8px 0 0;padding-left:20px;display:grid;gap:10px}
+.suggestion-preview li p{margin:3px 0;font-size:12px;color:#5f7354;overflow-wrap:anywhere}
+.suggestion-answer{color:#8a9a7a!important}
+.suggestion-actions{margin-top:10px;gap:10px}
+.suggestion-actions .primary{min-height:42px;padding:8px 15px;font-size:13px}
+.suggestion-zero{display:flex;align-items:center;gap:13px;background:#f5f8f0;border:1px dashed #dce5d2;border-radius:12px;padding:16px 18px;color:#7c9069}
+.suggestion-zero>div{flex:1}.suggestion-zero strong{font-size:13px}.suggestion-zero p{font-size:11px;margin-top:4px}
+.suggestion-empty{margin-bottom:24px}
+@media(max-width:700px){.suggestion-heading{flex-direction:column;gap:6px}.suggestion-card{padding:15px}.suggestion-zero{flex-wrap:wrap}.suggestion-zero .secondary{width:100%}}

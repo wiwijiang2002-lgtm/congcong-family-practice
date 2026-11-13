@@ -1,10 +1,12 @@
 # 在线部署交接
 
-## 当前状态（2026-11-12）
+## 当前状态（2026-11-13）
 
 已公开部署：[聪聪家庭练习](https://wiwijiang2002-lgtm.github.io/congcong-family-practice/)。无需登录，电脑不必运行本地服务或保持开机。
 
-本轮新增家长本地题库导入：真实题目和答案只写入访问设备的浏览器，不进入仓库或静态构建。家长需在每台设备（例如 iPad）上单独导入；学习记录与题库均不跨设备同步。
+本轮新增“弱点建议练习”：家长端「练习安排」按最近 7 天错题从本地题库寻找未做过的同知识点题目，生成家长确认后才布置的建议。不会自动发布；匹配是知识点/关键词文字比对，不跨设备。
+
+家长本地题库仍只在访问设备的浏览器中：真实题目和答案不进入仓库或静态构建。家长需在每台设备（例如 iPad）上单独导入；学习记录与题库均不跨设备同步。
 
 源码仓库：[wiwijiang2002-lgtm/congcong-family-practice](https://github.com/wiwijiang2002-lgtm/congcong-family-practice)。首次成功发布的程序提交为 `1454244f1a71d3b3f20293c413a3e860b8d04bda`，发布记录为 [Actions #2](https://github.com/wiwijiang2002-lgtm/congcong-family-practice/actions/runs/43192223734)。
 
@@ -12,14 +14,14 @@
 
 当前工作区的内置托管服务返回：`Publishing Sites to the internet is not enabled for this workspace.`（`sites_publish_disabled`）。已注册的站点 ID 保存在 `.openai/hosting.json`，未保存部署版本。管理员若启用公开发布，应复用该 ID，勿重复创建站点。
 
-已改用 GitHub Pages，GitHub 账号已连接，公开仓库和托管均已建立。云端依赖安装、39 项检查、静态构建与部署全部成功。未购买域名或其他付费服务。
+已改用 GitHub Pages，GitHub 账号已连接，公开仓库和托管均已建立。云端依赖安装、当时的 39 项检查、静态构建与部署全部成功。未购买域名或其他付费服务。
 
 ## GitHub Pages
 
 1. 在自己的账号下创建公开仓库，将本目录作为仓库根目录，推送到 `main`。
 2. 仓库 Settings → Pages → Build and deployment → Source 选择 GitHub Actions。
 3. 打开 Actions → Publish family practice → Run workflow。推送 main 也会触发。
-4. 工作流安装 Node.js 22、运行 51 项检查、构建静态网页、上传并部署。
+4. 工作流安装 Node.js 22、运行 58 项检查、构建静态网页、上传并部署。
 5. 等待全部成功后，以 github-pages 环境返回的实际 URL 为准；再用 iPad Safari 打开核验。
 
 以上初始化步骤已在当前仓库完成。后续在 main 推送程序更新即可自动发布。文档更新可以在提交信息中使用 `[skip ci]`，不触发无关的重新构建。
@@ -52,6 +54,7 @@ npm run build
 - `.github/workflows/pages.yml`：构建并部署到 GitHub Pages。
 - `.openai/hosting.json`：保留内置托管站点标识和静态目录。
 - `apps/family/src/local-bank.ts`、`LocalBankPanel.tsx`、`local-bank.test.ts`、`download.ts`：家长本地题库导入、管理和测试；`FamilyApp.tsx` 接入题库导航、布置页和自由选课。
+- `apps/family/src/suggestions.ts`、`suggestions.test.ts`、`WeakSuggestionPanel.tsx`：按最近 7 天错题从本地题库生成家长确认后布置的弱点建议练习。
 - `本地题库导入说明.md`：导入格式、隐私边界和真实题目文件的提供要求。
 - `README.md`、`HANDOFF.md`、本文件：维护、部署与更换开发工具的交接说明。
 
@@ -61,12 +64,13 @@ npm run build
 
 ## 已验证与限制
 
-- 51 项自动检查通过；生产静态构建通过。
+- 58 项自动检查通过；生产静态构建通过。
 - 浏览器端到端实测（Chromium，独立配置）：家长粘贴导入 3 道本地题 → 题库只写入 `congcong-family-local-bank:v1` → 布置 3 道 → 孩子全部答对得 30/30 → 刷新后题库与结果仍在 → 孩子端“自由选课”出现本地单元 → 页面资源全部来自本机，无外部请求。
+- 弱点建议端到端实测：本地题库 5 道题，孩子做错 1 道同知识点题后，家长「练习安排」出现建议；点“用这 3 道准备练习”打开布置页，已选 3 道，布置后计划题目全部来自本地题库。
 - 旧键 `congcong-family-demo:v1` 与上游 `csf-*` 记录未被改写；本地题库独立键，损坏时不覆盖原数据。
-- 本地题库暂不自动生成同类变式；一周巩固显示“待补充同类题”，不会伪造掌握状态。
+- 本地题库暂不自动生成同类变式；一周巩固显示“待补充同类题”，不会伪造掌握状态。弱点建议是文字匹配的建议草稿，不会自动发布，也不等于掌握验证。
 - 真实练习册题目尚未导入；仓库和静态构建不包含任何练习册原题或答案。
-- 未验证 GitHub Ubuntu 的 51 项检查、公开网址重建和真实 iPad Safari（本轮改动后）；更早的闭环、窄屏和每周复测验证见 VALIDATION.md。
+- 未验证 GitHub Ubuntu 的 58 项检查、公开网址重建和真实 iPad Safari（本轮改动后）；更早的闭环、窄屏和每周复测验证见 VALIDATION.md。
 - 上一版本已验证仓库子路径构建、公开地址在未登录独立浏览器的家长/孩子闭环、768 × 1024 触屏无横向溢出；本轮新增本地题库页面仍需发布后用真实设备复核。
 - 使用 Chromium 模拟，真实 iPad Safari 尚待发布后的设备验收。
 - 未验证中国大陆各运营商网络或无 VPN 的家庭 Wi-Fi；若实际直连缓慢或不可达，需要更换托管位置。

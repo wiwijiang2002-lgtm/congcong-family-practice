@@ -15,6 +15,7 @@ import { WeeklyPanel } from './WeeklyPanel';
 import { scheduleWeekly, weeklyTopics } from './weekly';
 import { addBank, decodeBankStore, emptyBankStore, localCourses, LOCAL_BANK_KEY, saveBankStore, type DraftQuestion, type LocalBank, type LocalBankStore } from './local-bank';
 import { LocalBankPanel } from './LocalBankPanel';
+import { WeakSuggestionPanel } from './WeakSuggestionPanel';
 import { download } from './download';
 
 type Role = 'child' | 'parent';
@@ -156,7 +157,7 @@ export default function FamilyApp() {
   }
   function navigate(t: Tab) { setTab(t); setBuilder(false); setResultId(null); setRunning(false); setCourse(null); }
   function coursePractice(c: Course) {
-    if (role === 'parent') { setBuilderCourse(c.edition==='local'&&c.bankId?`local:${c.bankId}`:c.id); setSelected(c.questions.map(q=>q.id)); setBuilderSearch(''); setName(`${c.title} · 课后练习`.slice(0,40)); setMinutes(c.subject==='语文'?8:6); setPlanDate(today); setBuilder(true); return; }
+    if (role === 'parent') { setBuilderCourse(c.edition==='local'&&c.bankId?`local:${c.bankId}`:c.id); setSelected(c.questions.map(q=>q.id)); setBuilderSearch(''); setSubject('全部'); setName(`${c.title} · 课后练习`.slice(0,40)); setMinutes(c.subject==='语文'?8:6); setPlanDate(today); setBuilder(true); return; }
     const next = commit(s => {
       if (s.session) throw new Error('请先完成进行中的练习，再开始其他课程。');
       const p = createPlan(`${c.title} · 自主练习`.slice(0,40),today,c.subject==='语文'?8:6,c.questions);
@@ -268,9 +269,21 @@ export default function FamilyApp() {
   }
   function assignLocalBank(bank: LocalBank) {
     setTab('plans'); setBuilder(true); setResultId(null); setRunning(false);
-    setBuilderCourse(`local:${bank.id}`); setSelected([]); setBuilderSearch('');
+    setBuilderCourse(`local:${bank.id}`); setSelected([]); setBuilderSearch(''); setSubject('全部');
     setName(`${bank.name} · 本地练习`.slice(0,40)); setMinutes(10); setPlanDate(today);
     setNotice('已打开本地题库，勾选要布置的题目（每份最多 12 道）。');
+  }
+  function prepareSuggestion(questions: FamilyQuestion[], label: string) {
+    if (!questions.length) return;
+    setSelected(questions.map(question => question.id));
+    setBuilderCourse('');
+    setBuilderSearch('');
+    setSubject('全部');
+    setName(`${label} · 弱点建议`.slice(0,40));
+    setMinutes(8);
+    setPlanDate(today);
+    setTab('plans'); setBuilder(true); setResultId(null); setRunning(false);
+    setNotice('已把建议题目放进布置页，请核对题目和答案后再布置。');
   }
 
   if (recovery) return <main className="recovery"><CircleAlert size={40}/><h1>本地数据需要检查</h1><p>没有覆盖原记录。可以先导出原始数据，再重置体验版。</p><p className="muted">{recovery.message}</p><div className="button-row"><button className="primary" onClick={() => download('聪聪-原始数据.json', recovery.raw)}>导出原始数据</button><button className="secondary" onClick={() => setConfirmReset(true)}>重置体验数据</button></div>{confirmReset && <Dialog title="重置本机体验数据？" close={() => setConfirmReset(false)}><p>仅清空家庭体验版的练习、结果和进度。请先导出需要保留的内容。</p><button className="danger" onClick={reset}>确认重置</button></Dialog>}</main>;
@@ -293,8 +306,15 @@ export default function FamilyApp() {
     : [{ id: 'plans' as Tab, label: '练习安排', icon: CalendarDays }, { id: 'courses' as Tab, label: '按课文选题', icon: Grid2X2 }, { id: 'bank' as Tab, label: '我的题库', icon: Library }, { id: 'reports' as Tab, label: '学习结果', icon: FileCheck2 }, { id: 'weekly' as Tab, label: '一周巩固', icon: Target }];
   const importedCourses = localCourses(bankStore.banks);
   const localBuilderBank = builderCourse.startsWith('local:') ? bankStore.banks.find(bank => `local:${bank.id}` === builderCourse) : undefined;
-  const builderItems=[...(localBuilderBank ? localBuilderBank.questions : BANK.filter(q=>builderCourse?q.lessonId===builderCourse:selected.includes(q.id))),...custom];
-  const builderFiltered = builderItems.filter(q => (subject === '全部' || q.subject === subject) && (!builderSearch.trim() || q.question.includes(builderSearch.trim())));
+  const allBankQuestions = bankStore.banks.flatMap(bank => bank.questions);
+  const selectedLocal = selected.some(id => allBankQuestions.some(question => question.id === id));
+  const selectedPool = [...BANK, ...allBankQuestions, ...custom].filter(question => selected.includes(question.id));
+  const builderItems = localBuilderBank
+    ? [...localBuilderBank.questions, ...custom]
+    : builderCourse
+      ? [...BANK.filter(question => question.lessonId === builderCourse), ...custom]
+      : [...selectedPool, ...custom.filter(question => !selected.includes(question.id))];
+  const builderFiltered = builderItems.filter(q => (subject === '全部' || q.subject === subject) && (!builderSearch.trim() || q.question.includes(builderSearch.trim()) || q.knowledge_point.includes(builderSearch.trim())));
   const builderShown = builderFiltered.slice(0, 100);
   const visibleCourses = (courseSubject === '数学'
     ? [...COURSES.filter(c => c.subject === '数学'), ...importedCourses.filter(c => c.subject === '数学')]
@@ -352,11 +372,11 @@ export default function FamilyApp() {
       : tab === 'bank' ? <LocalBankPanel banks={bankStore.banks} error={bankError} headingRef={headingRef} onImport={importLocalBank} onDelete={deleteLocalBank} onReset={resetLocalBanks} onExportRaw={exportRawBanks} onAssign={assignLocalBank} notice={setNotice}/>
       : builder ? <>
         <button className="text-button back-button" onClick={() => setBuilder(false)}><ArrowLeft size={18}/>返回练习安排</button><div className="page-heading"><div><span className="eyebrow">一点准备，让陪伴更轻松</span><h1 ref={headingRef} tabIndex={-1}>布置一份小练习</h1><p>选择现成组合，或自己挑选今天想练的题。</p></div></div>
-        <div className="template-grid">{TEMPLATES.map(t => <button key={t.id} className={`template-card ${selected.join(',') === t.ids.join(',') ? 'selected' : ''}`} onClick={() => { setSelected(t.ids); setName(t.name); setMinutes(t.minutes); setBuilderCourse(''); setBuilderSearch(''); }}><span className="template-icon">{t.id === 'chinese' ? '文' : t.id === 'math' ? '数' : '语数'}</span><strong>{t.name}</strong><p>{t.note}</p><small>{t.ids.length} 道题 · 约 {t.minutes} 分钟</small></button>)}</div>
-        <div className="course-toolbar"><label className="muted small" style={{flex:1}}>按课文 / 单元选择<select aria-label="布置练习的课文或单元" value={builderCourse} onChange={e=>{const value=e.target.value;setBuilderCourse(value);setBuilderSearch('');if(value.startsWith('local:')){const bank=bankStore.banks.find(b=>`local:${b.id}`===value);setSelected([]);if(bank){setName(`${bank.name} · 本地练习`.slice(0,40));setMinutes(10);setPlanDate(today);setNotice('勾选要布置的本地题目，每份最多 12 道。');}}else{const c=COURSES.find(c=>c.id===value);if(c){setSelected(c.questions.map(q=>q.id));setName(`${c.title} · 课后练习`);setMinutes(c.subject==='语文'?8:6);}}}}><option value="">当前组合</option>{(['tongbian-2026','sujiao-math'] as const).map(ed=><optgroup key={ed} label={editionName(ed)}>{COURSES.filter(c=>c.edition===ed).map(c=><option key={c.id} value={c.id}>{c.section} · {c.title}</option>)}</optgroup>)}{bankStore.banks.length>0&&<optgroup label="家长本地题库 · 仅本机">{bankStore.banks.map(b=><option key={b.id} value={`local:${b.id}`}>{b.name}（{b.questions.length} 道）</option>)}</optgroup>}</select></label></div>
+        <div className="template-grid">{TEMPLATES.map(t => <button key={t.id} className={`template-card ${selected.join(',') === t.ids.join(',') ? 'selected' : ''}`} onClick={() => { setSelected(t.ids); setName(t.name); setMinutes(t.minutes); setBuilderCourse(''); setBuilderSearch(''); setSubject('全部'); }}><span className="template-icon">{t.id === 'chinese' ? '文' : t.id === 'math' ? '数' : '语数'}</span><strong>{t.name}</strong><p>{t.note}</p><small>{t.ids.length} 道题 · 约 {t.minutes} 分钟</small></button>)}</div>
+        <div className="course-toolbar"><label className="muted small" style={{flex:1}}>按课文 / 单元选择<select aria-label="布置练习的课文或单元" value={builderCourse} onChange={e=>{const value=e.target.value;setBuilderCourse(value);setBuilderSearch('');setSubject('全部');if(value.startsWith('local:')){const bank=bankStore.banks.find(b=>`local:${b.id}`===value);setSelected([]);if(bank){setName(`${bank.name} · 本地练习`.slice(0,40));setMinutes(10);setPlanDate(today);setNotice('勾选要布置的本地题目，每份最多 12 道。');}}else{const c=COURSES.find(c=>c.id===value);if(c){setSelected(c.questions.map(q=>q.id));setName(`${c.title} · 课后练习`);setMinutes(c.subject==='语文'?8:6);}}}}><option value="">当前组合</option>{(['tongbian-2026','sujiao-math'] as const).map(ed=><optgroup key={ed} label={editionName(ed)}>{COURSES.filter(c=>c.edition===ed).map(c=><option key={c.id} value={c.id}>{c.section} · {c.title}</option>)}</optgroup>)}{bankStore.banks.length>0&&<optgroup label="家长本地题库 · 仅本机">{bankStore.banks.map(b=><option key={b.id} value={`local:${b.id}`}>{b.name}（{b.questions.length} 道）</option>)}</optgroup>}</select></label></div>
         <div className="builder-meta panel"><label>练习名称<input value={name} maxLength={40} onChange={e => setName(e.target.value)} placeholder="给练习起个名字"/></label><label>练习日期<input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)}/></label><label>预计分钟<input type="number" min="1" max="60" value={minutes} onChange={e => setMinutes(Number(e.target.value))}/></label></div>
         <div className="section-heading"><h2>挑选题目 <span className="count-pill">{selected.length} / 12</span></h2><div className="filter-tabs" aria-label="按学科筛选">{['全部','语文','数学'].map(s => <button key={s} aria-pressed={subject===s} onClick={() => setSubject(s)}>{s}</button>)}</div></div>
-        <p className="muted small question-bank-note">{localBuilderBank ? `来自《${localBuilderBank.name}》的本地题目，只保存在当前浏览器；勾选后随练习保存题目快照，答案不会上传。` : '二年级上册自编示例题。默写与填空自动判分，仿写保存原文供家长查看；请先预览并按学校要求调整。'}</p>
+        <p className="muted small question-bank-note">{localBuilderBank ? `来自《${localBuilderBank.name}》的本地题目，只保存在当前浏览器；勾选后随练习保存题目快照，答案不会上传。` : selectedLocal ? '这份建议练习包含本地题库题目，只保存在当前浏览器；请核对题干、答案和选项后再布置。' : '二年级上册自编示例题。默写与填空自动判分，仿写保存原文供家长查看；请先预览并按学校要求调整。'}</p>
         {localBuilderBank && <div className="course-toolbar"><input type="search" className="course-search" aria-label="在本地题库中搜索题干" value={builderSearch} onChange={e=>setBuilderSearch(e.target.value)} placeholder="在本题库中搜索题干或知识点"/><span className="muted small">共 {localBuilderBank.questions.length} 道，当前显示 {builderFiltered.length} 道{localBuilderBank.questions.length>100?'（最多显示前 100 道，可搜索缩小范围）':''}</span></div>}
         <div className="selection-list">{builderShown.map(q => <label key={q.id} className={`selection-card ${selected.includes(q.id) ? 'selected' : ''}`}><input type="checkbox" checked={selected.includes(q.id)} onChange={e => setSelected(e.target.checked ? (selected.length<12?[...selected,q.id]:selected) : selected.filter(id => id!==q.id))}/><span><span className="card-kicker">{q.subject} · {typeName(q)} · {q.knowledge_point}{q.origin === 'local' ? ' · 本地' : ''}</span><strong>{q.question}</strong><details onClick={e => e.stopPropagation()}><summary>预览答案与解析</summary><p>{responseAnswer(q.answer,q)} · {q.explanation}</p></details></span></label>)}</div>
         {builderShown.length === 0 && <div className="empty compact"><BookOpen size={26}/><h3>没有匹配的题目</h3><p>换一个关键词，或切换学科。</p></div>}
@@ -389,9 +409,10 @@ export default function FamilyApp() {
         {wrongs.length ? <div className="review-list">{wrongs.map(r => <article className="review-card" key={r.question.id}><span className="subject-icon peach"><BookOpen size={20}/></span><div><div className="card-kicker">{r.question.subject} · {r.question.knowledge_point}</div><h3>{r.question.question}</h3><p>上次答案：<strong className="red-text">{responseAnswer(r.answer,r.question)}</strong></p><details><summary>看看答案与讲解</summary><p>参考答案：{responseAnswer(r.question.answer,r.question)}</p><p>{r.question.explanation}</p></details></div></article>)}</div> : <div className="empty spacious"><Mascot size={130} mood="happy" skinOverride={null}/><h2>这里暂时没有错题</h2><p>做完练习后，需要巩固的题会自动收进来。</p><button className="primary" onClick={() => navigate('today')}>去做今天的练习</button></div>}
       </>
       : role === 'parent' && tab === 'plans' ? <>
-        <div className="page-heading"><div><span className="eyebrow">陪伴有方向，学习有回响</span><h1 ref={headingRef} tabIndex={-1}>安排一点，收获一点</h1><p>布置当天练习，完成后回来看看孩子的收获。</p></div><div className="button-row"><button className="secondary" onClick={() => navigate('bank')}><Library size={17}/>我的题库</button><button className="primary" onClick={() => { setBuilder(true); setBuilderCourse(''); setBuilderSearch(''); setPlanDate(today); }}><Plus size={19}/>布置练习</button></div></div>
+        <div className="page-heading"><div><span className="eyebrow">陪伴有方向，学习有回响</span><h1 ref={headingRef} tabIndex={-1}>安排一点，收获一点</h1><p>布置当天练习，完成后回来看看孩子的收获。</p></div><div className="button-row"><button className="secondary" onClick={() => navigate('bank')}><Library size={17}/>我的题库</button><button className="primary" onClick={() => { setBuilder(true); setBuilderCourse(''); setBuilderSearch(''); setSubject('全部'); setPlanDate(today); }}><Plus size={19}/>布置练习</button></div></div>
         <div className="parent-banner"><div className="subject-icon sage"><LayoutDashboard size={26}/></div><div><strong>一份练习，一次看得见的成长</strong><p>选题 → 孩子作答 → 自动判分 → 回顾结果</p></div><span className="local-pill"><i/>无需账号</span></div>
         <div className="stats-grid child-stats"><div><span>今天已布置</span><strong>{todays.length}<small> 份</small></strong></div><div><span>今天已完成</span><strong>{doneToday}<small> 份</small></strong></div><div><span>待巩固错题</span><strong>{wrongs.length}<small> 道</small></strong></div></div>
+        <WeakSuggestionPanel state={state} banks={bankStore.banks} now={weeklyNow} onUse={prepareSuggestion} onOpenBank={() => navigate('bank')}/>
         <div className="section-heading"><h2>练习安排</h2><span className="muted small">共 {state.plans.length} 份 · {dateLabel(today)}</span></div><div className="plan-list">{[...state.plans].sort((a,b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)).map(planCard)}</div>
         <div className="section-heading report-heading"><h2>最近的练习结果</h2><button className="text-button" onClick={() => navigate('reports')}>查看全部 <ChevronRight size={16}/></button></div>{latest.length ? <div className="history-list">{latest.slice(0,3).map(a => <ResultRow key={a.id} attempt={a} open={() => setResultId(a.id)}/>)}</div> : <div className="empty compact"><FileCheck2 size={27}/><h3>等待第一份小收获</h3><p>孩子完成练习后，得分和逐题答案会显示在这里。</p><button className="text-button" onClick={() => switchRole('child')}>切换孩子端试一试 <ChevronRight size={16}/></button></div>}
         <div className="inline-note"><CircleAlert size={17}/><span>当前为同一浏览器内的角色模拟。电脑与 iPad 之间尚未同步；切换角色无需密码。</span></div>

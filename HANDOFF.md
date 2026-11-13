@@ -8,6 +8,8 @@
 
 家长端另有「我的题库」：可从 Excel 粘贴或导入 CSV/TSV/JSON，把购买的练习册题目只保存在当前浏览器，再勾选布置，或在孩子端按单元自由练习。真实题目尚未导入；仓库不含练习册内容，格式见 `本地题库导入说明.md`。本地题库暂不自动生成同类变式，相关错题在一周巩固中显示“待补充同类题”，不会伪造掌握状态。
 
+「练习安排」还会根据最近 7 天的错题，从本地题库寻找知识标签相近、尚未布置过的题，生成最多 3 道建议练习。家长必须先在布置页预览和调整，确认后才发布；不会自动布置，也不会把文字匹配当成已验证的掌握。
+
 一周巩固按最近 7 个本地日历日归类具体技能，每项安排两道未见同类题；全部正确后至少等 24 小时，以另外两道未见题独立复测。复测完成前不提示对错或答案。复测全对仅表示本轮通过；之后出现新错会重新巩固。题池耗尽或不支持的补充题不能伪造掌握状态。
 
 ## 文件与命令
@@ -16,6 +18,7 @@
 - `apps/family/src/data.ts`：课程、基础示例题库、练习模板。
 - `apps/family/src/domain.ts`：作答、判分、持久化数据校验和状态推进。
 - `apps/family/src/local-bank.ts`、`LocalBankPanel.tsx`、`local-bank.test.ts`：家长本地题库的解析、校验、浏览器存储、题库管理和题库测试。
+- `apps/family/src/suggestions.ts`、`suggestions.test.ts`、`WeakSuggestionPanel.tsx`：按最近 7 天错题从本地题库找未做过的同知识点题目，生成家长确认后才布置的建议练习。
 - `apps/family/src/weekly.ts`、`weekly-questions.ts`、`WeeklyPanel.tsx`：一周错题、变式题池、复测规则和界面。
 - `apps/family/src/report.ts`：可读报告及文本转义。
 - `apps/family/app/family.css`：家庭版响应式样式。
@@ -25,7 +28,7 @@
 
 Node.js 22；仓库根目录依次运行 `npm ci`、`npm test`、`npm run dev`。开发网址为 `http://localhost:4173`。`npm run build` 生成根路径静态站 `dist/`；GitHub Pages 工作流通过 `FAMILY_BASE_PATH` 自动处理仓库子路径。先查看检查结果，再推送 main；程序推送会自动更新公开网站。
 
-51 项检查已在 Windows 本地通过（其中新增 12 项本地题库检查）；生产静态构建和 Chromium 浏览器端到端闭环已验证。GitHub Ubuntu、公开网址和真实 iPad Safari 尚待本轮推送后复验；家庭无 VPN 网络仍需用户验证。更多证据见 `VALIDATION.md`、`DEPLOYMENT.md`。
+58 项检查已在 Windows 本地通过（其中新增 12 项本地题库检查和 7 项弱点建议检查）；生产静态构建和 Chromium 浏览器端到端闭环已验证。GitHub Ubuntu、公开网址和真实 iPad Safari 尚待本轮推送后复验；家庭无 VPN 网络仍需用户验证。更多证据见 `VALIDATION.md`、`DEPLOYMENT.md`。
 
 ## 在 DeepSeek Harness 中继续
 
@@ -38,6 +41,8 @@ DSH 官方说明：[Web UI 与工作目录](https://github.com/deepseek-ai/deeps
 当前 `congcong-family-demo:v1` 记录只在浏览器本地。家长导入的题库另存于 `congcong-family-local-bank:v1`，同样只在当前浏览器，且不包含任何真实练习册内容于仓库。网站地址、浏览器和设备之间不会自动同步。上线不能自动读取原 localhost 记录；使用设置中的 JSON 备份。家长/孩子角色无需密码，同一设备切换使用。没有登录、CloudBase、微信、邮件、推送、云数据库或运行时付费 API。
 
 本地题库的错题会进入一周巩固，但因没有配套变式题池，会标记为“待补充同类题”。不要为了“看起来完整”而伪造同类题或掌握状态；真实题目的导入格式和限制见 `本地题库导入说明.md`。
+
+弱点建议使用知识点文字的近似匹配，不是 AI 语义理解；题库没标注知识点、标签过于笼统或不足 2 道未做题时，可能没有建议或建议数量不足。建议必须由家长核对题目、答案和难度后再布置。
 
 用户后续关注“像玩游戏一样学习”。下一轮可以先设计每天约 10 分钟的短任务、聪聪成长反馈和复测后的奖励；保留自由选课，不把错题答对原题当作掌握，也不奖励单纯反复刷分。完整地图和剧情尚未实现。
 
